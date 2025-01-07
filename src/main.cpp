@@ -3,6 +3,7 @@
 #include "BackgroundSubtractionPipeline.hpp"
 #include "TrackingPipeline.hpp"
 #include "Person.hpp" 
+#include "MultiTracking.hpp" 
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
@@ -14,6 +15,7 @@ int main() {
     StartMenu menu(windowWidth, windowHeight);
     BackgroundSubtractionPipeline pipeline;
     TrackingPipeline tracking;
+    MultiTracking multiTracking;
     const std::string videoPath = "data/input/video/normaleBewegung_D.mp4";
     const std::string outputPath = "data/output/fotos";
     cv::VideoCapture cap;
@@ -25,7 +27,7 @@ if (!pipeline.initializeVideoAndLoadGroundTruth(videoPath, cap, groundTruthMask,
 
     // Hauptfensterschleife
     while (window.isOpen()) {
-        menu.processEvents(window, pipeline,tracking, cap, groundTruthMask);
+        menu.processEvents(window, pipeline,tracking, multiTracking, cap, groundTruthMask);
         
         window.clear();
         menu.draw(window);

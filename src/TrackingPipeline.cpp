@@ -105,7 +105,6 @@ cv::Mat TrackingPipeline::applyKnn(const cv::Mat& frame) {
     return backgroundSubtraction.improveMask(knn);
 }
 
-// Personen erkennen und verfolgen
 void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
     cv::Mat fgMask = applyKnn(frame);
 
@@ -126,11 +125,14 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
 
     if (!largestContour.empty()) {
         isTracking = true;
-        trackedPerson.setContour(largestContour);
+
+        // Keypoints aus der größten Kontur extrahieren
         extractKeypoints(largestContour);
+
+        // Optical Flow anwenden, um Keypoints zu verfeinern
         applyOpticalFlow(frame);
 
-        // Kalman-Filter aktualisieren
+        // Kalman-Filter aktualisieren und neue Position schätzen
         if (!trackedPoints.empty()) {
             cv::Point2f meanPoint(0, 0);
             for (const auto& point : trackedPoints) {
@@ -138,8 +140,13 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
             }
             meanPoint.x /= trackedPoints.size();
             meanPoint.y /= trackedPoints.size();
+
+            // Kalman-Filter aktualisieren
             updateKalmanFilter(cv::Point(static_cast<int>(meanPoint.x), static_cast<int>(meanPoint.y)));
         }
+
+        // Nach der Verarbeitung die Kontur speichern
+        trackedPerson.setContour(largestContour);
     } else {
         isTracking = false;
         trackedPoints.clear();
@@ -210,7 +217,7 @@ void TrackingPipeline::processFrame(cv::Mat& frame) {
     }
 
     // Tracking- und Visualisierungslogik
-    generateGroundTruth(frame);
+    
     detectAndTrackPersons(frame);
     visualizeResults(frame);
 

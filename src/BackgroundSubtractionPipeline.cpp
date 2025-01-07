@@ -18,7 +18,7 @@ BackgroundSubtractionPipeline::BackgroundSubtractionPipeline() {
 // Methode zur Initialisierung der Hintergrundsubtraktoren
 void BackgroundSubtractionPipeline::initializeBackgroundSubtractor() {
     mog2 = cv::createBackgroundSubtractorMOG2();
-     mog2->setDetectShadows(true);  
+    mog2->setDetectShadows(true);  
     mog2->setShadowValue(127);     // Schatten-Pixelwert auf 127 setzen
     mog2->setShadowThreshold(0.5); 
     mog2->setVarThreshold(25);
@@ -26,6 +26,7 @@ void BackgroundSubtractionPipeline::initializeBackgroundSubtractor() {
     knn = cv::createBackgroundSubtractorKNN();
 
     knn->setDetectShadows(true);
+    knn->setHistory(30);   
 
     frameCount = 0;
     minInterval = cv::Mat();
