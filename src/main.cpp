@@ -16,7 +16,7 @@ int main() {
     BackgroundSubtractionPipeline pipeline;
     TrackingPipeline tracking;
     MultiTracking multiTracking;
-    const std::string videoPath = "data/input/video/normaleBewegung_D.mp4";
+    const std::string videoPath = "data/input/video/ueberlappungAus.mp4";
     const std::string outputPath = "data/output/fotos";
     cv::VideoCapture cap;
     cv::Mat groundTruthMask;

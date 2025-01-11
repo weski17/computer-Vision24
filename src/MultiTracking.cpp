@@ -40,68 +40,10 @@ void MultiTracking::initializeKalmanFilter(Person& person) {
     kalmanFilters[person.getId()] = kalman; // Speichere den Kalman-Filter
 }
 
-
-void MultiTracking::processFrame(const cv::Mat& frame) {
-    // Schritt 1: Hintergrundsubtraktion
-    cv::Mat mask = applyKnn(frame);
-
-    // Schritt 2: Überlappungshandhabung
-    cv::Mat segmented = performWatershed(frame, mask);
-
-    // Schritt 3: Konturenerkennung
-    std::vector<std::vector<cv::Point>> contours = findContours(segmented);
-
-    // Schritt 4: Optical Flow anwenden
-    applyOpticalFlow(frame);
-
-    // Schritt 5: Kalman-Filter aktualisieren
-    updateKalmanFilters();
-
-    // Schritt 6: Konturen zu Tracks zuordnen
-    assignContoursToTracks(contours, frame);
-
-    // Schritt 7: Daten übergeben
-    passDataToGameLogic();
-
-    // Schritt 8: Visualisierung
-    visualize(frame);
-
-    // FPS berechnen
-    measureFPS(frame);
-
-}
 // Schritt 1: Hintergrundsubtraktion
 cv::Mat MultiTracking::applyKnn(const cv::Mat& frame) {
     return trackingPipeline.applyKnn(frame);
 }
-
-
-// Schritt 2: Überlappungshandhabung
-cv::Mat MultiTracking::performWatershed(const cv::Mat& frame, const cv::Mat& mask) {
-    cv::Mat distTransform;
-    cv::distanceTransform(mask, distTransform, cv::DIST_L2, 5);
-    cv::normalize(distTransform, distTransform, 0, 1.0, cv::NORM_MINMAX);
-
-    // Marker erstellen
-    cv::Mat markers;
-    cv::threshold(distTransform, markers, 0.5, 1.0, cv::THRESH_BINARY); // Binärmaske erstellen
-    markers.convertTo(markers, CV_8U); // In 8-Bit konvertieren, falls nötig
-
-    // Verbundene Komponenten identifizieren
-    cv::Mat connectedComponents;
-    cv::connectedComponents(markers, connectedComponents, 8, CV_32S);
-
-    // Konvertiere für den Wasserscheiden-Algorithmus
-    connectedComponents += 1; // Hintergrund auf 1 setzen
-    cv::watershed(frame, connectedComponents);
-
-    // Erstelle segmentierte Maske
-    cv::Mat segmented;
-    connectedComponents.convertTo(segmented, CV_8U); // Optional für Visualisierung
-    return segmented;
-}
-
-
 
 // Schritt 3: Konturenerkennung
 std::vector<std::vector<cv::Point>> MultiTracking::findContours(const cv::Mat& mask) {
@@ -112,9 +54,8 @@ std::vector<std::vector<cv::Point>> MultiTracking::findContours(const cv::Mat& m
     cv::findContours(mask, allContours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     
     // Filtere kleine Konturen basierend auf ihrer Fläche
-    const double minArea = 5000.0; // Mindestfläche für relevante Konturen
     for (const auto& contour : allContours) {
-        if (cv::contourArea(contour) >= minArea) {
+        if (cv::contourArea(contour) >= MIN_AREA) {
             filteredContours.push_back(contour);
         }
     }
@@ -134,7 +75,21 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
 
     for (auto& [trackId, person] : tracks) {
         std::vector<cv::Point2f> trackedPoints = person.getTrackedPoints();
-        if (trackedPoints.empty()) continue;
+
+        if (trackedPoints.empty() || trackedPoints.size() < MIN_TRACKED_POINTS) {
+            // Wenn zu wenige Punkte vorhanden sind, extrahiere neue Keypoints
+            const auto& contour = person.getContour(); // Hole die Kontur der Person
+            person.extractKeypoints(contour);
+
+            // Konvertiere Keypoints in trackedPoints
+            std::vector<cv::Point2f> newTrackedPoints;
+            for (const auto& keypoint : person.getKeypoints()) {
+                newTrackedPoints.push_back(keypoint.pt);
+            }
+
+            person.setTrackedPoints(newTrackedPoints);
+            trackedPoints = newTrackedPoints; // Aktualisiere für diesen Frame
+        }
 
         std::vector<cv::Point2f> nextPoints;
         std::vector<uchar> status;
@@ -165,6 +120,7 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
             person.setCentroid(cv::Point(static_cast<int>(newCentroid.x), static_cast<int>(newCentroid.y)));
         }
     }
+    
 
     prevGrayFrame = currGrayFrame.clone();
 }
@@ -270,6 +226,7 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
         if (std::find(assignment.begin(), assignment.end(), c) == assignment.end()) {
             int newId = nextId++;
             Person newPerson(newId, contours[c]);
+            newPerson.extractKeypoints(contours[c]);
             initializeKalmanFilter(newPerson);
             tracks[newId] = newPerson;
         }
@@ -287,17 +244,36 @@ void MultiTracking::passDataToGameLogic() {
 
 
 // Schritt 8: Visualisierung
+// Schritt 8: Visualisierung
 void MultiTracking::visualize(const cv::Mat& frame) const {
     cv::Mat output = frame.clone(); // Klone das Frame, wenn Änderungen nötig sind
+
     for (const auto& track : tracks) {
         const Person& person = track.second;
 
+        // Zeichne die Konturen
         cv::drawContours(output, std::vector<std::vector<cv::Point>>{person.getContour()}, -1, cv::Scalar(0, 255, 0), 2);
+
+        // Hole den Begrenzungsrahmen (Bounding Box) der Kontur
+        cv::Rect boundingBox = cv::boundingRect(person.getContour());
+
+        // Berechne die Position für die ID (leicht oberhalb der Bounding Box)
+        cv::Point textPosition(boundingBox.x, boundingBox.y - 10); // 10 Pixel oberhalb der Bounding Box
+
+        // Vermeide negative Textpositionen (falls Bounding Box am oberen Rand liegt)
+        if (textPosition.y < 0) {
+            textPosition.y = 10; // Setze die ID in den sichtbaren Bereich
+        }
+
+        // Zeige die ID der Person
+        std::string text = "ID: " + std::to_string(person.getId());
+        cv::putText(output, text, textPosition, cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 2);
+
+        // Zeichne den Schwerpunkt (Centroid) der Person
         cv::circle(output, person.getCentroid(), 5, cv::Scalar(255, 0, 0), -1);
-        cv::putText(output, std::to_string(person.getId()), person.getCentroid(),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 2);
     }
-    cv::imshow("Tracking", output); // Debug-Ausgabe
+
+    cv::imshow("Tracking", output); // Zeige das Tracking-Ergebnis
 }
 
 
@@ -348,4 +324,32 @@ void MultiTracking::measureFPS(const cv::Mat& frame) {
         // Ausgabe der FPS
         std::cout << "FPS: " << fps << std::endl;
     }
+}
+
+void MultiTracking::processFrame(const cv::Mat& frame) {
+    // Schritt 1: Hintergrundsubtraktion
+    cv::Mat mask = applyKnn(frame);
+    cv::imshow("applyKnn", mask); 
+
+    // Schritt 3: Konturenerkennung
+    std::vector<std::vector<cv::Point>> contours = findContours(mask);
+
+    // Schritt 4: Optical Flow anwenden
+    applyOpticalFlow(frame);
+
+    // Schritt 5: Kalman-Filter aktualisieren
+    updateKalmanFilters();
+
+    // Schritt 6: Konturen zu Tracks zuordnen
+    assignContoursToTracks(contours, frame);
+
+    // Schritt 7: Daten übergeben
+    passDataToGameLogic();
+
+    // Schritt 8: Visualisierung
+    visualize(frame);
+
+    // FPS berechnen
+    measureFPS(frame);
+
 }

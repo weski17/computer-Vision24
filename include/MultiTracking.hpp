@@ -8,6 +8,8 @@
 #include <map>
 #include <chrono>
 
+constexpr int MIN_TRACKED_POINTS = 50;
+constexpr double MIN_AREA = 3500.0; // Mindestfläche für relevante Konturen
 
 class MultiTracking {
 public:
@@ -30,7 +32,6 @@ private:
     static cv::Mat calculateHsvHistogram(const cv::Mat& frame, const std::vector<cv::Point>& contour);
    
     cv::Mat applyKnn(const cv::Mat& frame);                            // Hintergrundsubtraktion
-    cv::Mat performWatershed(const cv::Mat& frame, const cv::Mat& mask); // Wasserscheiden
     std::vector<std::vector<cv::Point>> findContours(const cv::Mat& mask); // Konturenerkennung
     void applyOpticalFlow(const cv::Mat& frame);                       // Optical Flow
     void initializeKalmanFilter(Person& person);                      // Kalman-Filter initialisieren

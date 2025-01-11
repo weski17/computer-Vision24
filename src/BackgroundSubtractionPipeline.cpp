@@ -26,8 +26,9 @@ void BackgroundSubtractionPipeline::initializeBackgroundSubtractor() {
     knn = cv::createBackgroundSubtractorKNN();
 
     knn->setDetectShadows(true);
-    knn->setHistory(30);   
-
+    knn->setHistory(50);   
+    knn->setShadowThreshold(0.5); // Schattenempfindlichkeit
+    knn->setDist2Threshold(400.0); // Schwelle zur Unterscheidung naher Objekte
     frameCount = 0;
     minInterval = cv::Mat();
     maxInterval = cv::Mat();
