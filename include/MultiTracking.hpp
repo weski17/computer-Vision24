@@ -27,6 +27,8 @@ private:
     TrackingPipeline trackingPipeline;      // Objekt der TrackingPipeline
     std::map<int, cv::KalmanFilter> kalmanFilters;
 
+    std::vector<int> hungarianAlgorithm(const std::vector<std::vector<double>>& costMatrix);
+    
     // Hilfsmethoden
     double compareHistograms(const cv::Mat& hist1, const cv::Mat& hist2);
     static cv::Mat calculateHsvHistogram(const cv::Mat& frame, const std::vector<cv::Point>& contour);

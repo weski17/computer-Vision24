@@ -13,32 +13,40 @@ MultiTracking::~MultiTracking() {}
 
 
 void MultiTracking::initializeKalmanFilter(Person& person) {
-    cv::KalmanFilter kalman(4, 2, 0); // 4 Zustandsvariablen (x, y, dx, dy), 2 Messvariablen (x, y)
-
-    // Initialisiere den Zustand (x, y, dx, dy)
+    cv::KalmanFilter kalman(6, 2, 0); // Zustand: (x, y, dx, dy, ddx, ddy)
     cv::Point centroid = person.getCentroid();
+
+    // Initialisieren des Zustands
     kalman.statePre.at<float>(0) = centroid.x;
     kalman.statePre.at<float>(1) = centroid.y;
-    kalman.statePre.at<float>(2) = 0; // Geschwindigkeit in x
-    kalman.statePre.at<float>(3) = 0; // Geschwindigkeit in y
+    kalman.statePre.at<float>(2) = 0; // dx
+    kalman.statePre.at<float>(3) = 0; // dy
+    kalman.statePre.at<float>(4) = 0; // ddx
+    kalman.statePre.at<float>(5) = 0; // ddy
 
-    // Messmatrix (wir messen nur Position)
-    kalman.measurementMatrix = cv::Mat::eye(2, 4, CV_32F);
+    // Übergangsmatrix (inkl. Beschleunigung)
+    kalman.transitionMatrix = (cv::Mat_<float>(6, 6) <<
+        1, 0, 1, 0, 0.5, 0,
+        0, 1, 0, 1, 0, 0.5,
+        0, 0, 1, 0, 1, 0,
+        0, 0, 0, 1, 0, 1,
+        0, 0, 0, 0, 1, 0,
+        0, 0, 0, 0, 0, 1);
 
-    // Übergangsmatrix (lineares Modell)
-    kalman.transitionMatrix = (cv::Mat_<float>(4, 4) <<
-        1, 0, 1, 0,  // x = x + dx
-        0, 1, 0, 1,  // y = y + dy
-        0, 0, 1, 0,  // dx bleibt gleich
-        0, 0, 0, 1); // dy bleibt gleich
+    // Messmatrix
+    kalman.measurementMatrix = (cv::Mat_<float>(2, 6) <<
+        1, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0);
 
-    // Prozessrauschen
+    // Prozess- und Messrauschen
     setIdentity(kalman.processNoiseCov, cv::Scalar::all(1e-4));
-    setIdentity(kalman.measurementNoiseCov, cv::Scalar::all(1e-2)); // Messrauschen
-    setIdentity(kalman.errorCovPost, cv::Scalar::all(1));           // Fehler im Nachzustand
+    setIdentity(kalman.measurementNoiseCov, cv::Scalar::all(1e-2));
+    setIdentity(kalman.errorCovPost, cv::Scalar::all(1));
 
-    kalmanFilters[person.getId()] = kalman; // Speichere den Kalman-Filter
+    // Kalman-Filter speichern
+    kalmanFilters[person.getId()] = kalman;
 }
+
 
 // Schritt 1: Hintergrundsubtraktion
 cv::Mat MultiTracking::applyKnn(const cv::Mat& frame) {
@@ -129,42 +137,126 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
 // Schritt 5: Kalman-Filter aktualisieren
 void MultiTracking::updateKalmanFilters() {
     for (auto& [trackId, person] : tracks) {
-        // Kalman-Filter Vorhersage
         cv::KalmanFilter& kalman = kalmanFilters[trackId];
+
+        // Kalman-Vorhersage
         cv::Mat prediction = kalman.predict();
 
-        // Vorhergesagte Position
-        cv::Point predictedCentroid(
-            static_cast<int>(prediction.at<float>(0)),
-            static_cast<int>(prediction.at<float>(1))
+        // Dynamisches Rauschen basierend auf Geschwindigkeit
+        float speed = std::sqrt(
+            std::pow(kalman.statePost.at<float>(2), 2) + // dx^2
+            std::pow(kalman.statePost.at<float>(3), 2)   // dy^2
         );
+        float noiseScale = (speed > 10.0f) ? 1e-3 : 1e-4;
+        setIdentity(kalman.processNoiseCov, cv::Scalar::all(noiseScale));
 
-        // Messung aktualisieren
+        // Messung (Position der Person)
         cv::Mat measurement(2, 1, CV_32F);
         cv::Point actualCentroid = person.getCentroid();
         measurement.at<float>(0) = actualCentroid.x;
         measurement.at<float>(1) = actualCentroid.y;
 
-        // Kalman-Filter korrigieren
+        // Kalman-Korrektur
         cv::Mat corrected = kalman.correct(measurement);
 
-        // Korrigierte Position
+        // Korrigierte Position aktualisieren
         cv::Point correctedCentroid(
             static_cast<int>(corrected.at<float>(0)),
             static_cast<int>(corrected.at<float>(1))
         );
-
-        // Aktualisiere die Position im Person-Objekt
         person.setCentroid(correctedCentroid);
     }
 }
 
 
+std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector<double>>& costMatrix) {
+    // Debugging: Kostenmatrix prüfen
+    if (costMatrix.empty() || costMatrix[0].empty()) {
+        std::cerr << "Fehler: Kostenmatrix ist leer." << std::endl;
+        return {};
+    }
+
+    std::cout << "Kostenmatrix in HungarianAlgorithm:" << std::endl;
+    for (size_t i = 0; i < costMatrix.size(); ++i) {
+        for (size_t j = 0; j < costMatrix[i].size(); ++j) {
+            std::cout << costMatrix[i][j] << " ";
+            if (std::isnan(costMatrix[i][j]) || std::isinf(costMatrix[i][j])) {
+                std::cerr << "Ungültiger Wert in Matrix: Zeile " << i 
+                          << ", Spalte " << j << " = " << costMatrix[i][j] << std::endl;
+            }
+        }
+        std::cout << std::endl;
+    }
+
+    int n = costMatrix.size();    // Anzahl der Tracks (Zeilen)
+    int m = costMatrix[0].size(); // Anzahl der Konturen (Spalten)
+
+    std::cout << "Dimensionen der Matrix: " << n << " x " << m << std::endl;
+
+    // Schritt 1: Zeilenreduktion
+    std::vector<std::vector<double>> reducedMatrix = costMatrix;
+    for (int i = 0; i < n; ++i) {
+        double rowMin = *std::min_element(reducedMatrix[i].begin(), reducedMatrix[i].end());
+        for (int j = 0; j < m; ++j) {
+            reducedMatrix[i][j] -= rowMin;
+        }
+    }
+
+    std::cout << "Matrix nach Zeilenreduktion:" << std::endl;
+    for (const auto& row : reducedMatrix) {
+        for (double cost : row) {
+            std::cout << cost << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Schritt 2: Spaltenreduktion
+    for (int j = 0; j < m; ++j) {
+        double colMin = std::numeric_limits<double>::max();
+        for (int i = 0; i < n; ++i) {
+            colMin = std::min(colMin, reducedMatrix[i][j]);
+        }
+        for (int i = 0; i < n; ++i) {
+            reducedMatrix[i][j] -= colMin;
+        }
+    }
+
+    std::cout << "Matrix nach Spaltenreduktion:" << std::endl;
+    for (const auto& row : reducedMatrix) {
+        for (double cost : row) {
+            std::cout << cost << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Zuordnung finden
+    std::vector<int> assignment(n, -1);
+    std::vector<bool> rowCovered(n, false);
+    std::vector<bool> colCovered(m, false);
+
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < m; ++j) {
+            if (reducedMatrix[i][j] == 0 && !rowCovered[i] && !colCovered[j]) {
+                assignment[i] = j;
+                rowCovered[i] = true;
+                colCovered[j] = true;
+                std::cout << "Zuordnung: Track " << i << " -> Contour " << j << std::endl;
+            }
+        }
+    }
+
+    return assignment;
+}
+
+
+
+
 // Schritt 6: Konturen zu Tracks zuordnen
 void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Point>>& contours, const cv::Mat& frame) {
+    // Schritt 1: Kostenmatrix erstellen
     std::vector<std::vector<double>> costMatrix(tracks.size(), std::vector<double>(contours.size(), 0));
-
     int i = 0;
+
     for (const auto& [trackId, person] : tracks) {
         int j = 0;
         for (const auto& contour : contours) {
@@ -172,25 +264,21 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
             cv::Moments moments = cv::moments(contour);
             cv::Point contourCentroid(moments.m10 / moments.m00, moments.m01 / moments.m00);
 
-            // Berechne die euklidische Distanz
+            // Berechnung der Zuordnungskosten
             double distance = cv::norm(trackCentroid - contourCentroid);
-
-            // Vergleich der Fläche
             double contourArea = cv::contourArea(contour);
             double areaDifference = std::abs(person.getArea() - contourArea);
 
-            // Vergleich des Aspektverhältnisses
             cv::Rect boundingBox = cv::boundingRect(contour);
             double contourAspectRatio = static_cast<double>(boundingBox.width) / boundingBox.height;
             double aspectRatioDifference = std::abs(person.getAspectRatio() - contourAspectRatio);
 
-            // Vergleich des HSV-Histogramms
             cv::Mat contourHistogram = MultiTracking::calculateHsvHistogram(frame, contour);
-
             double histogramSimilarity = compareHistograms(person.getHsvHistogram(), contourHistogram);
 
-            // Kombinierte Kosten berechnen
-            double totalCost = 0.5 * distance + 0.3 * areaDifference + 0.1 * aspectRatioDifference + 0.1 * (1 - histogramSimilarity);
+            // Gesamtkosten berechnen
+            double totalCost = 0.6 * distance + 0.2 * areaDifference + 0.1 * aspectRatioDifference + 0.3 * (1 - histogramSimilarity);
+
             costMatrix[i][j] = totalCost;
 
             j++;
@@ -198,30 +286,39 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
         i++;
     }
 
-    // Zuordnung mit Ungarischer Methode
-    std::vector<int> assignment(tracks.size(), -1);
-    for (size_t t = 0; t < tracks.size(); ++t) {
-        double minCost = 1e9;
-        int bestContour = -1;
-        for (size_t c = 0; c < contours.size(); ++c) {
-            if (costMatrix[t][c] < minCost) {
-                minCost = costMatrix[t][c];
-                bestContour = c;
-            }
+    // Debugging: Kostenmatrix anzeigen
+    std::cout << "Kostenmatrix:" << std::endl;
+    for (const auto& row : costMatrix) {
+        for (double cost : row) {
+            std::cout << cost << " ";
         }
-        assignment[t] = bestContour;
+        std::cout << std::endl;
     }
 
+    // Schritt 2: Zuordnung mit Ungarischer Methode
+    std::vector<int> assignment = hungarianAlgorithm(costMatrix);
+ 
+
+    // Debugging: Zuordnung prüfen
+    std::cout << "Zuordnung:" << std::endl;
     for (size_t t = 0; t < assignment.size(); ++t) {
-        if (assignment[t] != -1) {
+        std::cout << "Track " << t << " -> Contour " << assignment[t] << std::endl;
+    }
+
+    // Schritt 3: Tracks aktualisieren
+    for (size_t t = 0; t < assignment.size(); ++t) {
+        if (assignment[t] != -1) { // Wenn eine gültige Zuordnung existiert
             int contourIdx = assignment[t];
             auto& person = tracks[t];
             person.setContour(contours[contourIdx]);
-            person.extractKeypoints(contours[contourIdx]); // Keypoints extrahieren
+            person.extractKeypoints(contours[contourIdx]);
+
+            // Debugging: Aktualisierte Tracks
+            std::cout << "Track " << t << " aktualisiert mit Kontur " << contourIdx << std::endl;
         }
     }
 
-    // Neue Konturen, die keinem Track zugeordnet wurden
+    // Schritt 4: Nicht zugeordnete Konturen als neue Tracks hinzufügen
     for (size_t c = 0; c < contours.size(); ++c) {
         if (std::find(assignment.begin(), assignment.end(), c) == assignment.end()) {
             int newId = nextId++;
@@ -229,9 +326,14 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
             newPerson.extractKeypoints(contours[c]);
             initializeKalmanFilter(newPerson);
             tracks[newId] = newPerson;
+
+            // Debugging: Neue Tracks hinzufügen
+            std::cout << "Neuer Track hinzugefügt: ID " << newId << " für Kontur " << c << std::endl;
         }
     }
 }
+
+
 
 // Schritt 7: Daten übergeben
 void MultiTracking::passDataToGameLogic() {
@@ -243,7 +345,6 @@ void MultiTracking::passDataToGameLogic() {
 }
 
 
-// Schritt 8: Visualisierung
 // Schritt 8: Visualisierung
 void MultiTracking::visualize(const cv::Mat& frame) const {
     cv::Mat output = frame.clone(); // Klone das Frame, wenn Änderungen nötig sind
