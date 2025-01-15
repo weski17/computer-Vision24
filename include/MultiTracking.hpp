@@ -8,8 +8,8 @@
 #include <map>
 #include <chrono>
 
-constexpr int MIN_TRACKED_POINTS = 50;
-constexpr double MIN_AREA = 3500.0; // Mindestfläche für relevante Konturen
+constexpr int MIN_TRACKED_POINTS = 60;
+constexpr double MIN_AREA = 4500.0; // Mindestfläche für relevante Konturen
 
 class MultiTracking {
 public:

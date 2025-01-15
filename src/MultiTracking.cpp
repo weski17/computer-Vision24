@@ -277,7 +277,13 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
             double histogramSimilarity = compareHistograms(person.getHsvHistogram(), contourHistogram);
 
             // Gesamtkosten berechnen
-            double totalCost = 0.6 * distance + 0.2 * areaDifference + 0.1 * aspectRatioDifference + 0.3 * (1 - histogramSimilarity);
+            double totalCost = 0.7 * distance + 0.2 * areaDifference + 0.1 * aspectRatioDifference + 0.3 * (1 - histogramSimilarity);   
+            if (totalCost > 500.0) {
+            totalCost = 1e9; // Setzen Sie sehr hohe Kosten für unplausible Zuordnungen
+            }
+
+
+
 
             costMatrix[i][j] = totalCost;
 
@@ -297,7 +303,6 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
 
     // Schritt 2: Zuordnung mit Ungarischer Methode
     std::vector<int> assignment = hungarianAlgorithm(costMatrix);
- 
 
     // Debugging: Zuordnung prüfen
     std::cout << "Zuordnung:" << std::endl;
@@ -319,6 +324,7 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
     }
 
     // Schritt 4: Nicht zugeordnete Konturen als neue Tracks hinzufügen
+    std::vector<int> usedContours; // Liste der genutzten Konturen
     for (size_t c = 0; c < contours.size(); ++c) {
         if (std::find(assignment.begin(), assignment.end(), c) == assignment.end()) {
             int newId = nextId++;
@@ -329,9 +335,13 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
 
             // Debugging: Neue Tracks hinzufügen
             std::cout << "Neuer Track hinzugefügt: ID " << newId << " für Kontur " << c << std::endl;
+
+            usedContours.push_back(c); // Markiere diese Kontur als verwendet
         }
     }
+
 }
+
 
 
 
@@ -352,11 +362,14 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
     for (const auto& track : tracks) {
         const Person& person = track.second;
 
-        // Zeichne die Konturen
-        cv::drawContours(output, std::vector<std::vector<cv::Point>>{person.getContour()}, -1, cv::Scalar(0, 255, 0), 2);
-
         // Hole den Begrenzungsrahmen (Bounding Box) der Kontur
         cv::Rect boundingBox = cv::boundingRect(person.getContour());
+
+        // Farbauswahl basierend auf der ID
+        cv::Scalar color = cv::Scalar(0, 255 - person.getId() * 50, 255); // Unterschiedliche Farben für verschiedene IDs
+
+        // Zeichne die Bounding Box
+        cv::rectangle(output, boundingBox, color, 2); // Rechteck mit der definierten Farbe
 
         // Berechne die Position für die ID (leicht oberhalb der Bounding Box)
         cv::Point textPosition(boundingBox.x, boundingBox.y - 10); // 10 Pixel oberhalb der Bounding Box
@@ -376,6 +389,8 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
 
     cv::imshow("Tracking", output); // Zeige das Tracking-Ergebnis
 }
+
+
 
 
 double MultiTracking::compareHistograms(const cv::Mat& hist1, const cv::Mat& hist2) {
