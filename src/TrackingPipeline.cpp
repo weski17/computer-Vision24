@@ -192,37 +192,9 @@ void TrackingPipeline::updateKalmanFilter(const cv::Point& measuredPoint) {
 
 // Frame verarbeiten
 void TrackingPipeline::processFrame(cv::Mat& frame) {
-    static cv::VideoWriter writer;
-    static bool isWriterInitialized = false;
-    const std::string outputPath = "data/output/video2.avi";
-
-    // VideoWriter initialisieren
-    if (!isWriterInitialized) {
-        int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
-        double fps = 30;
-        cv::Size frameSize(frame.cols, frame.rows);
-
-        writer.open(outputPath, codec, fps, frameSize, true);
-        if (!writer.isOpened()) {
-            return;
-        }
-        isWriterInitialized = true;
-    }
-
-    // Tracking- und Visualisierungslogik
     generateGroundTruth(frame);
     detectAndTrackPersons(frame);
     visualizeResults(frame);
-
-    // Verarbeiteten Frame schreiben
-    writer.write(frame);
-
-    // Frame anzeigen
-    cv::imshow("Tracking Output", frame);
-    if (cv::waitKey(1) == 27) { // ESC-Taste zum Beenden
-        writer.release();
-        isWriterInitialized = false;
-    }
 }
 
 // Ergebnisse visualisieren
@@ -238,4 +210,9 @@ void TrackingPipeline::evaluateFrame(cv::Mat& frame) {
     if (!groundTruthContours.empty()) {
         evaluateTrackingResults();
     }
+}
+
+// Kontur der verfolgten Person abrufen
+const std::vector<cv::Point>& TrackingPipeline::getTrackedContour() const {
+    return trackedPerson.getContour();
 }
