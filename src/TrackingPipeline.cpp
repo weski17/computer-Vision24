@@ -213,3 +213,4 @@ void TrackingPipeline::evaluateFrame(cv::Mat& frame) {
 const std::vector<cv::Point>& TrackingPipeline::getTrackedContour() const {
     return trackedPerson.getContour();
 }
+
