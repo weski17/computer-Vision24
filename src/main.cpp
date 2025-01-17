@@ -1,42 +1,44 @@
-#include <SFML/Graphics.hpp>
-#include "startmenu.hpp"
-#include "BackgroundSubtractionPipeline.hpp"
-#include "TrackingPipeline.hpp"
-#include "Person.hpp" 
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include "Video.hpp"
 
 int main() {
-    const int windowWidth = 800;
-    const int windowHeight = 600;
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Eye Track");
+    std::cout << "Starte das Programm..." << std::endl;
 
-    StartMenu menu(windowWidth, windowHeight);
-    BackgroundSubtractionPipeline pipeline;
-    TrackingPipeline tracking;
-    const std::string videoPath = "data/input/video/normaleBewegung_D.mp4";
-    const std::string outputPath = "data/output/fotos";
-    cv::VideoCapture cap;
-    cv::Mat groundTruthMask;
+    // Kamera öffnen
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) {
+        std::cerr << "Fehler: Kamera konnte nicht geöffnet werden!" << std::endl;
+        return -1;
+    }
+    std::cout << "Kamera erfolgreich geöffnet." << std::endl;
 
-if (!pipeline.initializeVideoAndLoadGroundTruth(videoPath, cap, groundTruthMask, outputPath)) {
-    return -1;  // Beenden, falls Initialisierung fehlschlägt
-}
+    // Fenster erstellen
+    cv::namedWindow("Live Video mit Bällen", cv::WINDOW_AUTOSIZE);
 
-    // Hauptfensterschleife
-    while (window.isOpen()) {
-        menu.processEvents(window, pipeline,tracking, cap, groundTruthMask);
-        
-        window.clear();
-        menu.draw(window);
-        window.draw(menu.getIconSprite());
-        window.display();
+    cv::Mat frame;
+
+    while (true) {
+        cap >> frame;
+        if (frame.empty()) {
+            std::cerr << "Fehler: Frame konnte nicht abgerufen werden!" << std::endl;
+            break;
+        }
+
+        frame = addBallsToPicture(frame);
+
+        cv::imshow("Live Video mit Bällen", frame);
+
+        char key = cv::waitKey(30);
+        if (key == 'q') {
+            std::cout << "Taste 'q' gedrückt, beende das Programm." << std::endl;
+            break;
+        }
     }
 
-    // Ressourcen freigeben
     cap.release();
-    pipeline.releaseVideoWriters();
     cv::destroyAllWindows();
+    std::cout << "Programm beendet." << std::endl;
 
     return 0;
 }
