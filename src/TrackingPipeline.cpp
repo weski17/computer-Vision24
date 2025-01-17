@@ -199,10 +199,7 @@ void TrackingPipeline::processFrame(cv::Mat& frame) {
 
 // Ergebnisse visualisieren
 void TrackingPipeline::visualizeResults(cv::Mat& frame) {
-    if (isTracking && !trackedPerson.getContour().empty()) {
-        cv::Rect predictedBox = cv::boundingRect(trackedPerson.getContour());
-        cv::rectangle(frame, predictedBox, cv::Scalar(0, 0, 255), 2);
-    }
+    // Keine Boundingbox mehr zeichnen
 }
 
 // Frame evaluieren
