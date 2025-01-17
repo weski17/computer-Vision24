@@ -10,7 +10,7 @@ Ball::Ball(int row, int col) {
     std::uniform_real_distribution<float> distX(-0.5f, 0.5f);
     std::uniform_real_distribution<float> distY(1.0f, 3.0f); // Vertikale Geschwindigkeit angepasst
 
-    radius = std::uniform_int_distribution<int>(10, 20)(gen);
+    radius = std::uniform_int_distribution<int>(20, 40)(gen); // Radius erhöht
     x = std::uniform_int_distribution<int>(radius, col - radius)(gen); // Verhindere Start außerhalb des Bereichs
     y = 0; // Start oben am Bildschirmrand
     vx = distX(gen); // Geschwindigkeit in x-Richtung
