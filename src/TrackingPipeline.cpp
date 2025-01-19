@@ -1,3 +1,4 @@
+// TrackingPipeline.cpp - Verbesserungen
 #include "TrackingPipeline.hpp"
 #include <queue>
 #include <fstream>
@@ -141,8 +142,10 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
             updateKalmanFilter(cv::Point(static_cast<int>(meanPoint.x), static_cast<int>(meanPoint.y)));
         }
     } else {
+        // Neu hinzugefügt: Reset des Trackings, wenn keine Konturen gefunden werden
         isTracking = false;
         trackedPoints.clear();
+        trackedPerson.setContour(std::vector<cv::Point>());
     }
 }
 
@@ -199,7 +202,15 @@ void TrackingPipeline::processFrame(cv::Mat& frame) {
 
 // Ergebnisse visualisieren
 void TrackingPipeline::visualizeResults(cv::Mat& frame) {
-    // Keine Boundingbox mehr zeichnen
+    if (!isTracking) {
+        return; // Keine Visualisierung, wenn kein Tracking aktiv ist
+    }
+
+    const std::vector<cv::Point>& contour = trackedPerson.getContour();
+    if (!contour.empty()) {
+        std::vector<std::vector<cv::Point>> contoursToDraw = {contour};
+        cv::drawContours(frame, contoursToDraw, -1, cv::Scalar(0, 255, 0), 2); // Grün
+    }
 }
 
 // Frame evaluieren
@@ -213,4 +224,3 @@ void TrackingPipeline::evaluateFrame(cv::Mat& frame) {
 const std::vector<cv::Point>& TrackingPipeline::getTrackedContour() const {
     return trackedPerson.getContour();
 }
-
