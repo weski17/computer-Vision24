@@ -1,4 +1,5 @@
 #include "startmenu.hpp"
+#include "GameLogic.hpp"
 #include <iostream>
 
 /**
@@ -212,29 +213,14 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
             std::cout << "Single Mode gestartet." << std::endl;
             window.close();
 
-            cv::Mat frame;
-            while (true) {
-                cap >> frame;
-                if (frame.empty()) {
-                    std::cout << "Video-Tracking abgeschlossen." << std::endl;
-                    break;
-                }
+            // Erstelle ein TrackingPipeline-Objekt
+            TrackingPipeline tracking;
 
-                try {
-                    // Komplettes Tracking in einer Methode
-                    tracking.processFrame(frame);
-                    cv::imshow("Tracking Output", frame); // Ergebnisse anzeigen
-                } catch (const std::exception &e) {
-                    std::cerr << "Fehler beim Tracking: " << e.what() << std::endl;
-                    break;
-                }
+            // Erstelle die Spiel-Logik
+            GameLogic gameLogic(tracking);
 
-                if (cv::waitKey(30) == 'q') {
-                    std::cout << "Single Mode manuell beendet." << std::endl;
-                    break;
-                }
-            }
-            cv::destroyAllWindows(); // Fenster schließen
+            // Starte den Single Mode
+            gameLogic.runSingleMode(cap);
             break;
         }
         case MultiMode:

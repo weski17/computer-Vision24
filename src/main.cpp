@@ -1,68 +1,43 @@
 #include <SFML/Graphics.hpp>
+#include "startmenu.hpp"
+#include "BackgroundSubtractionPipeline.hpp"
 #include "TrackingPipeline.hpp"
+#include "GameLogic.hpp"
 #include <opencv2/opencv.hpp>
 
-int main() {
+int main()
+{
     const int windowWidth = 800;
     const int windowHeight = 600;
 
-    // Erstelle ein Fenster für die Benutzeroberfläche
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Live Tracking");
+    // Erstelle ein Fenster für das Menü
+    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Start Menu");
 
-    // Initialisiere Tracking-Pipeline
+    // Initialisiere das Startmenü
+    StartMenu startMenu(windowWidth, windowHeight);
+
+    // Initialisiere Tracking-Pipeline und andere benötigte Komponenten
     TrackingPipeline tracking;
-
-    // Öffne Webcam (Index 0 für Standardkamera)
+    BackgroundSubtractionPipeline pipeline;
     cv::VideoCapture cap(0);
-    if (!cap.isOpened()) {
+    if (!cap.isOpened())
+    {
         std::cerr << "Fehler: Webcam konnte nicht geöffnet werden!" << std::endl;
         return -1;
     }
+    cv::Mat groundTruthMask; // Leere Maske (für spätere Nutzung)
 
-    // Hauptverarbeitungsschleife
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            if (event.type == sf::Event::Closed) {
-                window.close();
-            }
-        }
+    // Menü-Schleife
+    while (window.isOpen())
+    {
+        // Verarbeite Benutzerereignisse im Menü
+        startMenu.processEvents(window, pipeline, tracking, cap, groundTruthMask);
 
-        // Lade aktuellen Frame von der Webcam
-        cv::Mat frame;
-        cap >> frame;
-        if (frame.empty()) {
-            std::cerr << "Fehler: Kein Frame von der Webcam erhalten!" << std::endl;
-            break;
-        }
-
-        // Verarbeite Frame mit der Tracking-Pipeline
-        tracking.processFrame(frame);
-
-        // Abrufen des Konturs der verfolgten Person
-        const std::vector<cv::Point>& contour = tracking.getTrackedContour();
-        if (!contour.empty()) {
-            // Kontur auf dem Frame zeichnen
-            std::vector<std::vector<cv::Point>> contoursToDraw = {contour};
-            cv::drawContours(frame, contoursToDraw, -1, cv::Scalar(0, 255, 0), 2); // Grün
-        }
-
-        // Zeige das Ergebnis im OpenCV-Fenster
-        cv::imshow("Live Tracking Output", frame);
-
-        // Beende bei ESC-Taste
-        if (cv::waitKey(1) == 27) {
-            break;
-        }
-
-        // Aktualisiere das SFML-Fenster (optional, falls UI benötigt wird)
+        // Zeichne das Menü
         window.clear();
+        startMenu.draw(window);
         window.display();
     }
-
-    // Ressourcen freigeben
-    cap.release();
-    cv::destroyAllWindows();
 
     return 0;
 }
