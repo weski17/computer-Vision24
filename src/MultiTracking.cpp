@@ -72,7 +72,7 @@ std::vector<std::vector<cv::Point>> MultiTracking::findContours(const cv::Mat& m
 }
 
 // Schritt 4: Optical Flow anwenden
-void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
+void MultiTracking::applyOpticalFlow(const cv::Mat& frame, std::vector<std::vector<cv::Point>> contours) {
     if (prevGrayFrame.empty()) {
         cv::cvtColor(frame, prevGrayFrame, cv::COLOR_BGR2GRAY);
         return;
@@ -84,29 +84,38 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
     for (auto& [trackId, person] : tracks) {
         std::vector<cv::Point2f> trackedPoints = person.getTrackedPoints();
 
+        // Wenn zu wenige Punkte vorhanden sind, extrahiere neue Keypoints
         if (trackedPoints.empty() || trackedPoints.size() < MIN_TRACKED_POINTS) {
-            // Wenn zu wenige Punkte vorhanden sind, extrahiere neue Keypoints
-            const auto& contour = person.getContour(); // Hole die Kontur der Person
-            person.extractKeypoints(contour);
+            cv::Mat mask = cv::Mat::zeros(currGrayFrame.size(), CV_8UC1);
 
-            // Konvertiere Keypoints in trackedPoints
-            std::vector<cv::Point2f> newTrackedPoints;
-            for (const auto& keypoint : person.getKeypoints()) {
-                newTrackedPoints.push_back(keypoint.pt);
+            // Begrenzungsrahmen der Person verwenden
+            cv::Rect bbox = person.getBoundingBox();
+            cv::rectangle(mask, bbox, cv::Scalar(255), -1);
+
+            // Extrahiere Keypoints innerhalb der Bounding Box
+            std::vector<cv::Point2f> newKeypoints;
+            cv::goodFeaturesToTrack(currGrayFrame, newKeypoints, 100, 0.01, 10, mask, 3, false, 0.04);
+
+            if (!newKeypoints.empty()) {
+                person.setTrackedPoints(newKeypoints);
+                trackedPoints = newKeypoints;
+            } else {
+                // Wenn keine neuen Punkte gefunden werden, Vorhersage durch Kalman-Filter
+                cv::Mat prediction = kalmanFilters[trackId].predict();
+                cv::Point predictedCentroid(prediction.at<float>(0), prediction.at<float>(1));
+                person.setCentroid(predictedCentroid);
+                continue; // Überspringe den Optical Flow, wenn keine Keypoints vorhanden sind
             }
-
-            person.setTrackedPoints(newTrackedPoints);
-            trackedPoints = newTrackedPoints; // Aktualisiere für diesen Frame
         }
 
         std::vector<cv::Point2f> nextPoints;
         std::vector<uchar> status;
         std::vector<float> err;
 
-        // Optical Flow für Keypoints berechnen
+        // Optical Flow berechnen
         cv::calcOpticalFlowPyrLK(prevGrayFrame, currGrayFrame, trackedPoints, nextPoints, status, err);
 
-        // Entferne ungültige Keypoints
+        // Filtere ungültige Punkte
         std::vector<cv::Point2f> validNextPoints;
         for (size_t i = 0; i < nextPoints.size(); ++i) {
             if (status[i]) {
@@ -114,11 +123,16 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
             }
         }
 
-        // Aktualisiere die getrackten Keypoints
-        person.setTrackedPoints(validNextPoints);
+        // Wenn keine gültigen Punkte vorhanden sind, Vorhersage durch Kalman-Filter
+        if (validNextPoints.empty()) {
+            cv::Mat prediction = kalmanFilters[trackId].predict();
+            cv::Point predictedCentroid(prediction.at<float>(0), prediction.at<float>(1));
+            person.setCentroid(predictedCentroid);
+        } else {
+            // Aktualisiere getrackte Punkte
+            person.setTrackedPoints(validNextPoints);
 
-        // Optional: Schwerpunkt aktualisieren
-        if (!validNextPoints.empty()) {
+            // Aktualisiere den Schwerpunkt basierend auf den Keypoints
             cv::Point2f newCentroid(0, 0);
             for (const auto& pt : validNextPoints) {
                 newCentroid += pt;
@@ -126,12 +140,18 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame) {
             newCentroid.x /= validNextPoints.size();
             newCentroid.y /= validNextPoints.size();
             person.setCentroid(cv::Point(static_cast<int>(newCentroid.x), static_cast<int>(newCentroid.y)));
+
+            // Aktualisiere den Kalman-Filter mit der neuen Messung
+            cv::Mat measurement(2, 1, CV_32F);
+            measurement.at<float>(0) = newCentroid.x;
+            measurement.at<float>(1) = newCentroid.y;
+            kalmanFilters[trackId].correct(measurement);
         }
     }
-    
 
     prevGrayFrame = currGrayFrame.clone();
 }
+
 
 
 // Schritt 5: Kalman-Filter aktualisieren
@@ -277,11 +297,20 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
             double histogramSimilarity = compareHistograms(person.getHsvHistogram(), contourHistogram);
 
             // Gesamtkosten berechnen
-            double totalCost = 0.7 * distance + 0.2 * areaDifference + 0.1 * aspectRatioDifference + 0.3 * (1 - histogramSimilarity);   
-            if (totalCost > 500.0) {
+            double totalCost = 0.4 * distance + 0.2 * areaDifference + 0.2 * aspectRatioDifference + 0.2 * (1 - histogramSimilarity);   
+            if (totalCost > 100.0) {
             totalCost = 1e9; // Setzen Sie sehr hohe Kosten für unplausible Zuordnungen
             }
-
+        // Debugging-Ausgaben
+        std::cout << "Track ID: " << trackId << ", Contour Index: " << j << std::endl;
+        std::cout << "  - Distance: " << distance << std::endl;
+        std::cout << "  - Area (Track vs Contour): " << person.getArea() << " vs " << contourArea << std::endl;
+        std::cout << "  - Area Difference: " << areaDifference << std::endl;
+        std::cout << "  - Aspect Ratio (Track vs Contour): " << person.getAspectRatio() 
+                  << " vs " << contourAspectRatio << std::endl;
+        std::cout << "  - Aspect Ratio Difference: " << aspectRatioDifference << std::endl;
+        std::cout << "  - Histogram Similarity: " << histogramSimilarity << std::endl;
+        std::cout << "  - Total Cost: " << totalCost << std::endl;
 
 
 
@@ -315,7 +344,7 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
         if (assignment[t] != -1) { // Wenn eine gültige Zuordnung existiert
             int contourIdx = assignment[t];
             auto& person = tracks[t];
-            person.setContour(contours[contourIdx]);
+            person.setContour(contours[contourIdx], frame);
             person.extractKeypoints(contours[contourIdx]);
 
             // Debugging: Aktualisierte Tracks
@@ -395,20 +424,35 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
 
 double MultiTracking::compareHistograms(const cv::Mat& hist1, const cv::Mat& hist2) {
     if (hist1.empty() || hist2.empty()) {
-        return 0.0; // Geringe Ähnlichkeit, falls ein Histogramm fehlt
+        std::cout << "Eines der Histogramme ist leer!" << std::endl;
+        return 0.0;
     }
-    return cv::compareHist(hist1, hist2, cv::HISTCMP_CORREL);
+
+    // Ähnlichkeit berechnen
+    double similarity = cv::compareHist(hist1, hist2, cv::HISTCMP_CORREL);
+
+    // Debugging-Ausgabe
+    std::cout << "Histogram Vergleich - Ähnlichkeit: " << similarity << std::endl;
+
+    return similarity;
 }
 
 
 cv::Mat MultiTracking::calculateHsvHistogram(const cv::Mat& frame, const std::vector<cv::Point>& contour) {
     cv::Rect boundingBox = cv::boundingRect(contour);
+
+    // Prüfen, ob die Bounding Box gültig ist
     if (boundingBox.area() == 0 || frame.empty()) {
+        std::cout << "Ungültige Bounding Box oder leeres Frame." << std::endl;
         return cv::Mat();
     }
+
+    // ROI extrahieren
     cv::Mat roi = frame(boundingBox);
     cv::Mat hsv;
     cv::cvtColor(roi, hsv, cv::COLOR_BGR2HSV);
+
+    // Histogrammberechnung
     int hBins = 50, sBins = 60;
     int histSize[] = {hBins, sBins};
     float hRanges[] = {0, 180};
@@ -416,10 +460,17 @@ cv::Mat MultiTracking::calculateHsvHistogram(const cv::Mat& frame, const std::ve
     const float* ranges[] = {hRanges, sRanges};
     int channels[] = {0, 1};
     cv::Mat hsvHistogram;
+
     cv::calcHist(&hsv, 1, channels, cv::Mat(), hsvHistogram, 2, histSize, ranges, true, false);
     cv::normalize(hsvHistogram, hsvHistogram, 0, 255, cv::NORM_MINMAX);
+
+    // Debugging-Ausgabe: Zeige Histogramm
+    std::cout << "Histogramm (erster Wert): " << (hsvHistogram.empty() ? 0 : hsvHistogram.at<float>(0, 0)) << std::endl;
+    std::cout << "Histogramm Größe: " << hsvHistogram.rows << "x" << hsvHistogram.cols << std::endl;
+
     return hsvHistogram;
 }
+
 
 void MultiTracking::measureFPS(const cv::Mat& frame) {
     static auto lastTime = std::chrono::high_resolution_clock::now();
@@ -451,7 +502,7 @@ void MultiTracking::processFrame(const cv::Mat& frame) {
     std::vector<std::vector<cv::Point>> contours = findContours(mask);
 
     // Schritt 4: Optical Flow anwenden
-    applyOpticalFlow(frame);
+    applyOpticalFlow(frame, contours);
 
     // Schritt 5: Kalman-Filter aktualisieren
     updateKalmanFilters();

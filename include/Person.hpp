@@ -32,7 +32,7 @@ public:
     void setId(int id);
 
     const std::vector<cv::Point>& getContour() const;
-    void setContour(const std::vector<cv::Point>& contour);
+    void setContour(const std::vector<cv::Point>& contour, const cv::Mat& frame);
 
     cv::Point getCentroid() const;
     void setCentroid(const cv::Point& centroid);

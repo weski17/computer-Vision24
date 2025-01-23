@@ -27,9 +27,10 @@ const std::vector<cv::Point>& Person::getContour() const {
     return contour;
 }
 
-void Person::setContour(const std::vector<cv::Point>& contour) {
+void Person::setContour(const std::vector<cv::Point>& contour, const cv::Mat& frame) {
     this->contour = contour;
     calculateProperties();
+    computeHsvHistogram(frame);
 }
 
 cv::Point Person::getCentroid() const {
@@ -89,15 +90,6 @@ void Person::calculateProperties() {
 
     // Bounding Box berechnen
     boundingBox = cv::boundingRect(contour);
-
-    // Schwerpunkt berechnen
-    cv::Moments moments = cv::moments(contour);
-    if (moments.m00 != 0) {
-        centroid = cv::Point(static_cast<int>(moments.m10 / moments.m00),
-                             static_cast<int>(moments.m01 / moments.m00));
-    } else {
-        centroid = cv::Point(0, 0);
-    }
 
     // Aspektverhältnis (Breite/Höhe)
     if (boundingBox.height != 0) {

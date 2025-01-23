@@ -35,7 +35,7 @@ private:
    
     cv::Mat applyKnn(const cv::Mat& frame);                            // Hintergrundsubtraktion
     std::vector<std::vector<cv::Point>> findContours(const cv::Mat& mask); // Konturenerkennung
-    void applyOpticalFlow(const cv::Mat& frame);                       // Optical Flow
+    void applyOpticalFlow(const cv::Mat& frame, std::vector<std::vector<cv::Point>> contours);                       // Optical Flow
     void initializeKalmanFilter(Person& person);                      // Kalman-Filter initialisieren
     void updateKalmanFilters();                                       // Kalman-Filter aktualisieren
     void assignContoursToTracks(const std::vector<std::vector<cv::Point>>& contours, const cv::Mat& frame); // Konturen zuordnen

@@ -146,7 +146,7 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
         }
 
         // Nach der Verarbeitung die Kontur speichern
-        trackedPerson.setContour(largestContour);
+        trackedPerson.setContour(largestContour,frame);
     } else {
         isTracking = false;
         trackedPoints.clear();
