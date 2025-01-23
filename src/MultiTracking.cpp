@@ -53,7 +53,7 @@ cv::Mat MultiTracking::applyKnn(const cv::Mat& frame) {
     return trackingPipeline.applyKnn(frame);
 }
 
-// Schritt 3: Konturenerkennung
+// Schritt 2: Konturenerkennung
 std::vector<std::vector<cv::Point>> MultiTracking::findContours(const cv::Mat& mask) {
     std::vector<std::vector<cv::Point>> allContours;
     std::vector<std::vector<cv::Point>> filteredContours;
@@ -71,6 +71,108 @@ std::vector<std::vector<cv::Point>> MultiTracking::findContours(const cv::Mat& m
     return filteredContours; // Rückgabe nur der gefilterten Konturen
 }
 
+// Schritt 3: Konturen zu Tracks zuordnen
+void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Point>>& contours, const cv::Mat& frame) {
+    // Schritt 1: Kostenmatrix erstellen
+    std::vector<std::vector<double>> costMatrix(tracks.size(), std::vector<double>(contours.size(), 0));
+    int i = 0;
+
+    for (const auto& [trackId, person] : tracks) {
+        int j = 0;
+        for (const auto& contour : contours) {
+            cv::Point trackCentroid = person.getCentroid();
+            cv::Moments moments = cv::moments(contour);
+            cv::Point contourCentroid(moments.m10 / moments.m00, moments.m01 / moments.m00);
+
+            // Berechnung der Zuordnungskosten
+            double distance = cv::norm(trackCentroid - contourCentroid);
+            double contourArea = cv::contourArea(contour);
+            double areaDifference = std::abs(person.getArea() - contourArea);
+
+            cv::Rect boundingBox = cv::boundingRect(contour);
+            double contourAspectRatio = static_cast<double>(boundingBox.width) / boundingBox.height;
+            double aspectRatioDifference = std::abs(person.getAspectRatio() - contourAspectRatio);
+
+            cv::Mat contourHistogram = MultiTracking::calculateHsvHistogram(frame, contour);
+            double histogramSimilarity = compareHistograms(person.getHsvHistogram(), contourHistogram);
+
+            // Gesamtkosten berechnen
+            double totalCost = 0.4 * distance + 0.2 * areaDifference + 0.2 * aspectRatioDifference + 0.2 * (1 - histogramSimilarity);   
+            if (totalCost > 100.0) {
+            totalCost = 1e9; // Setzen Sie sehr hohe Kosten für unplausible Zuordnungen
+            }
+        // Debugging-Ausgaben
+        std::cout << "Track ID: " << trackId << ", Contour Index: " << j << std::endl;
+        std::cout << "  - Distance: " << distance << std::endl;
+        std::cout << "  - Area (Track vs Contour): " << person.getArea() << " vs " << contourArea << std::endl;
+        std::cout << "  - Area Difference: " << areaDifference << std::endl;
+        std::cout << "  - Aspect Ratio (Track vs Contour): " << person.getAspectRatio() 
+                  << " vs " << contourAspectRatio << std::endl;
+        std::cout << "  - Aspect Ratio Difference: " << aspectRatioDifference << std::endl;
+        std::cout << "  - Histogram Similarity: " << histogramSimilarity << std::endl;
+        std::cout << "  - Total Cost: " << totalCost << std::endl;
+
+
+
+            costMatrix[i][j] = totalCost;
+
+            j++;
+        }
+        i++;
+    }
+
+    // Debugging: Kostenmatrix anzeigen
+    std::cout << "Kostenmatrix:" << std::endl;
+    for (const auto& row : costMatrix) {
+        for (double cost : row) {
+            std::cout << cost << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Schritt 2: Zuordnung mit Ungarischer Methode
+    std::vector<int> assignment = hungarianAlgorithm(costMatrix);
+
+    // Debugging: Zuordnung prüfen
+    std::cout << "Zuordnung:" << std::endl;
+    for (size_t t = 0; t < assignment.size(); ++t) {
+        std::cout << "Track " << t << " -> Contour " << assignment[t] << std::endl;
+    }
+
+    // Schritt 3: Tracks aktualisieren
+    for (size_t t = 0; t < assignment.size(); ++t) {
+        if (assignment[t] != -1) { // Wenn eine gültige Zuordnung existiert
+            int contourIdx = assignment[t];
+            auto& person = tracks[t];
+            person.setContour(contours[contourIdx], frame);
+            person.extractKeypoints(contours[contourIdx]);
+
+            // Debugging: Aktualisierte Tracks
+            std::cout << "Track " << t << " aktualisiert mit Kontur " << contourIdx << std::endl;
+        }
+    }
+
+    // Schritt 4: Nicht zugeordnete Konturen als neue Tracks hinzufügen
+    std::vector<int> usedContours; // Liste der genutzten Konturen
+    for (size_t c = 0; c < contours.size(); ++c) {
+        if (std::find(assignment.begin(), assignment.end(), c) == assignment.end()) {
+            int newId = nextId++;
+            Person newPerson(newId, contours[c]);
+            newPerson.extractKeypoints(contours[c]);
+            initializeKalmanFilter(newPerson);
+            tracks[newId] = newPerson;
+
+            // Debugging: Neue Tracks hinzufügen
+            std::cout << "Neuer Track hinzugefügt: ID " << newId << " für Kontur " << c << std::endl;
+
+            usedContours.push_back(c); // Markiere diese Kontur als verwendet
+        }
+    }
+
+}
+
+
+
 // Schritt 4: Optical Flow anwenden
 void MultiTracking::applyOpticalFlow(const cv::Mat& frame, std::vector<std::vector<cv::Point>> contours) {
     if (prevGrayFrame.empty()) {
@@ -83,13 +185,15 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame, std::vector<std::vect
 
     for (auto& [trackId, person] : tracks) {
         std::vector<cv::Point2f> trackedPoints = person.getTrackedPoints();
-
+        std::cout << "trackedPoints: " << trackedPoints << std::endl;
         // Wenn zu wenige Punkte vorhanden sind, extrahiere neue Keypoints
         if (trackedPoints.empty() || trackedPoints.size() < MIN_TRACKED_POINTS) {
             cv::Mat mask = cv::Mat::zeros(currGrayFrame.size(), CV_8UC1);
-
+            
             // Begrenzungsrahmen der Person verwenden
             cv::Rect bbox = person.getBoundingBox();
+                std::cout << "Track ID: " << person.getId() << std::endl;
+            std::cout << "BoundingBox: " << bbox << std::endl;
             cv::rectangle(mask, bbox, cv::Scalar(255), -1);
 
             // Extrahiere Keypoints innerhalb der Bounding Box
@@ -271,106 +375,6 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
 
 
 
-// Schritt 6: Konturen zu Tracks zuordnen
-void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Point>>& contours, const cv::Mat& frame) {
-    // Schritt 1: Kostenmatrix erstellen
-    std::vector<std::vector<double>> costMatrix(tracks.size(), std::vector<double>(contours.size(), 0));
-    int i = 0;
-
-    for (const auto& [trackId, person] : tracks) {
-        int j = 0;
-        for (const auto& contour : contours) {
-            cv::Point trackCentroid = person.getCentroid();
-            cv::Moments moments = cv::moments(contour);
-            cv::Point contourCentroid(moments.m10 / moments.m00, moments.m01 / moments.m00);
-
-            // Berechnung der Zuordnungskosten
-            double distance = cv::norm(trackCentroid - contourCentroid);
-            double contourArea = cv::contourArea(contour);
-            double areaDifference = std::abs(person.getArea() - contourArea);
-
-            cv::Rect boundingBox = cv::boundingRect(contour);
-            double contourAspectRatio = static_cast<double>(boundingBox.width) / boundingBox.height;
-            double aspectRatioDifference = std::abs(person.getAspectRatio() - contourAspectRatio);
-
-            cv::Mat contourHistogram = MultiTracking::calculateHsvHistogram(frame, contour);
-            double histogramSimilarity = compareHistograms(person.getHsvHistogram(), contourHistogram);
-
-            // Gesamtkosten berechnen
-            double totalCost = 0.4 * distance + 0.2 * areaDifference + 0.2 * aspectRatioDifference + 0.2 * (1 - histogramSimilarity);   
-            if (totalCost > 100.0) {
-            totalCost = 1e9; // Setzen Sie sehr hohe Kosten für unplausible Zuordnungen
-            }
-        // Debugging-Ausgaben
-        std::cout << "Track ID: " << trackId << ", Contour Index: " << j << std::endl;
-        std::cout << "  - Distance: " << distance << std::endl;
-        std::cout << "  - Area (Track vs Contour): " << person.getArea() << " vs " << contourArea << std::endl;
-        std::cout << "  - Area Difference: " << areaDifference << std::endl;
-        std::cout << "  - Aspect Ratio (Track vs Contour): " << person.getAspectRatio() 
-                  << " vs " << contourAspectRatio << std::endl;
-        std::cout << "  - Aspect Ratio Difference: " << aspectRatioDifference << std::endl;
-        std::cout << "  - Histogram Similarity: " << histogramSimilarity << std::endl;
-        std::cout << "  - Total Cost: " << totalCost << std::endl;
-
-
-
-            costMatrix[i][j] = totalCost;
-
-            j++;
-        }
-        i++;
-    }
-
-    // Debugging: Kostenmatrix anzeigen
-    std::cout << "Kostenmatrix:" << std::endl;
-    for (const auto& row : costMatrix) {
-        for (double cost : row) {
-            std::cout << cost << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    // Schritt 2: Zuordnung mit Ungarischer Methode
-    std::vector<int> assignment = hungarianAlgorithm(costMatrix);
-
-    // Debugging: Zuordnung prüfen
-    std::cout << "Zuordnung:" << std::endl;
-    for (size_t t = 0; t < assignment.size(); ++t) {
-        std::cout << "Track " << t << " -> Contour " << assignment[t] << std::endl;
-    }
-
-    // Schritt 3: Tracks aktualisieren
-    for (size_t t = 0; t < assignment.size(); ++t) {
-        if (assignment[t] != -1) { // Wenn eine gültige Zuordnung existiert
-            int contourIdx = assignment[t];
-            auto& person = tracks[t];
-            person.setContour(contours[contourIdx], frame);
-            person.extractKeypoints(contours[contourIdx]);
-
-            // Debugging: Aktualisierte Tracks
-            std::cout << "Track " << t << " aktualisiert mit Kontur " << contourIdx << std::endl;
-        }
-    }
-
-    // Schritt 4: Nicht zugeordnete Konturen als neue Tracks hinzufügen
-    std::vector<int> usedContours; // Liste der genutzten Konturen
-    for (size_t c = 0; c < contours.size(); ++c) {
-        if (std::find(assignment.begin(), assignment.end(), c) == assignment.end()) {
-            int newId = nextId++;
-            Person newPerson(newId, contours[c]);
-            newPerson.extractKeypoints(contours[c]);
-            initializeKalmanFilter(newPerson);
-            tracks[newId] = newPerson;
-
-            // Debugging: Neue Tracks hinzufügen
-            std::cout << "Neuer Track hinzugefügt: ID " << newId << " für Kontur " << c << std::endl;
-
-            usedContours.push_back(c); // Markiere diese Kontur als verwendet
-        }
-    }
-
-}
-
 
 
 
@@ -384,7 +388,6 @@ void MultiTracking::passDataToGameLogic() {
 }
 
 
-// Schritt 8: Visualisierung
 void MultiTracking::visualize(const cv::Mat& frame) const {
     cv::Mat output = frame.clone(); // Klone das Frame, wenn Änderungen nötig sind
 
@@ -418,6 +421,7 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
 
     cv::imshow("Tracking", output); // Zeige das Tracking-Ergebnis
 }
+
 
 
 
@@ -494,21 +498,26 @@ void MultiTracking::measureFPS(const cv::Mat& frame) {
 }
 
 void MultiTracking::processFrame(const cv::Mat& frame) {
+    static int frameCounter = 0; // Statischer Frame-Zähler
+
+    // Frame-Zähler erhöhen
+    frameCounter++;
+
     // Schritt 1: Hintergrundsubtraktion
     cv::Mat mask = applyKnn(frame);
     cv::imshow("applyKnn", mask); 
 
-    // Schritt 3: Konturenerkennung
-    std::vector<std::vector<cv::Point>> contours = findContours(mask);
+    // Bedingung: Nur wenn der Frame-Zähler größer als 30 ist, werden Schritt 3 und 4 ausgeführt
+    if (frameCounter > 30) {
+        // Schritt 3: Konturenerkennung
+        std::vector<std::vector<cv::Point>> contours = findContours(mask);
 
-    // Schritt 4: Optical Flow anwenden
-    applyOpticalFlow(frame, contours);
+        // Schritt 4: Konturen zu Tracks zuordnen
+        assignContoursToTracks(contours, frame);
+        // Schritt 5: Optical Flow anwenden
+        applyOpticalFlow(frame, contours);
 
-    // Schritt 5: Kalman-Filter aktualisieren
-    updateKalmanFilters();
-
-    // Schritt 6: Konturen zu Tracks zuordnen
-    assignContoursToTracks(contours, frame);
+    }
 
     // Schritt 7: Daten übergeben
     passDataToGameLogic();
@@ -519,4 +528,6 @@ void MultiTracking::processFrame(const cv::Mat& frame) {
     // FPS berechnen
     measureFPS(frame);
 
+    // Debugging: Zeige den aktuellen Frame-Zähler
+    std::cout << "Aktueller Frame: " << frameCounter << std::endl;
 }

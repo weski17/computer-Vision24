@@ -109,15 +109,22 @@ void Person::calculateProperties() {
 
 // Keypoints extrahieren
 void Person::extractKeypoints(const std::vector<cv::Point>& contour) {
-    std::vector<cv::KeyPoint> contourKeypoints;
-    int step = std::max(1, static_cast<int>(contour.size() / 100)); // Schrittgröße bestimmen
-    for (size_t i = 0; i < contour.size(); i += step) {
-        cv::Point2f pt = contour[i];
-        cv::KeyPoint keyPoint(pt, 2.0f); // Erstelle KeyPoint mit einer Größe von 2.0
-        contourKeypoints.push_back(keyPoint);
+    cv::Rect boundingBox = cv::boundingRect(contour);
+    cv::Mat mask = cv::Mat::zeros(boundingBox.size(), CV_8UC1);
+
+    cv::drawContours(mask, std::vector<std::vector<cv::Point>>{contour}, -1, cv::Scalar(255), cv::FILLED, cv::LINE_8, cv::noArray(), INT_MAX, -boundingBox.tl());
+
+    std::vector<cv::Point2f> corners;
+    cv::goodFeaturesToTrack(mask, corners, 100, 0.01, 10);
+
+    std::vector<cv::KeyPoint> cornerKeypoints;
+    for (const auto& corner : corners) {
+        cornerKeypoints.emplace_back(corner, 3.0f);
     }
-    keypoints = contourKeypoints; // Speichere extrahierte Keypoints
+
+    keypoints = cornerKeypoints;
 }
+
 
 void Person::computeHsvHistogram(const cv::Mat& frame) {
     if (boundingBox.area() == 0 || frame.empty()) return;
