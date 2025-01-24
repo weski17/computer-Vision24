@@ -1,4 +1,3 @@
-// Anpassungen in GameLogic.cpp
 #include "GameLogic.hpp"
 #include "Video.hpp"
 #include <iostream>
@@ -107,8 +106,6 @@ void GameLogic::drawScore(cv::Mat &frame)
                 cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(238, 26, 118), 2);
     cv::putText(frame, "Winning Score: 15", cv::Point(10, frame.rows - 20),
                 cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
-    cv::putText(frame, "Winning Score: 10", cv::Point(10, 150),
-                cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(88, 80, 171), 2);
 }
 
 void GameLogic::displayEndScreen()
@@ -149,7 +146,7 @@ void GameLogic::displayEndScreen()
         resultText.setString("Success! Score: " + std::to_string(score));
         resultText.setPosition(
             (endWindow.getSize().x - resultText.getLocalBounds().width) / 2,
-            (endWindow.getSize().y - resultText.getLocalBounds().height) / 2);
+            endWindow.getSize().y / 3);
         resultText.setFillColor(sf::Color::Blue);
     }
     else
@@ -157,9 +154,39 @@ void GameLogic::displayEndScreen()
         resultText.setString("Failed! Score: " + std::to_string(score));
         resultText.setPosition(
             (endWindow.getSize().x - resultText.getLocalBounds().width) / 2,
-            (endWindow.getSize().y - resultText.getLocalBounds().height) / 2);
+            endWindow.getSize().y / 3);
         resultText.setFillColor(sf::Color::Red);
     }
+
+    sf::Texture iconTexture;
+    if (!iconTexture.loadFromFile("assets/fotos/Symbol.png"))
+    {
+        std::cerr << "Fehler beim Laden des Symbols!" << std::endl;
+        return;
+    }
+    sf::Sprite iconSprite;
+    iconSprite.setTexture(iconTexture);
+    iconSprite.setScale(0.3f, 0.3f);
+
+    const std::vector<std::string> options = {"New Game", "Exit"};
+    std::vector<sf::Text> menuItems;
+    for (size_t i = 0; i < options.size(); ++i)
+    {
+        sf::Text menuItem;
+        menuItem.setFont(font);
+        menuItem.setString(options[i]);
+        menuItem.setCharacterSize(30);
+        menuItem.setFillColor(i == 0 ? sf::Color(238, 26, 118) : sf::Color::White);
+        menuItem.setPosition(
+            (endWindow.getSize().x - menuItem.getLocalBounds().width) / 2,
+            endWindow.getSize().y / 2 + i * 50);
+        menuItems.push_back(menuItem);
+    }
+
+    size_t selectedItemIndex = 0;
+    iconSprite.setPosition(
+        menuItems[0].getPosition().x - iconSprite.getGlobalBounds().width - 10,
+        menuItems[0].getPosition().y + menuItems[0].getGlobalBounds().height / 2 - iconSprite.getGlobalBounds().height / 2);
 
     while (endWindow.isOpen())
     {
@@ -170,11 +197,55 @@ void GameLogic::displayEndScreen()
             {
                 endWindow.close();
             }
+            if (event.type == sf::Event::KeyPressed)
+            {
+                if (event.key.code == sf::Keyboard::Up)
+                {
+                    menuItems[selectedItemIndex].setFillColor(sf::Color::White);
+                    selectedItemIndex = (selectedItemIndex == 0) ? menuItems.size() - 1 : selectedItemIndex - 1;
+                    menuItems[selectedItemIndex].setFillColor(sf::Color(238, 26, 118));
+                    iconSprite.setPosition(
+                        menuItems[selectedItemIndex].getPosition().x - iconSprite.getGlobalBounds().width - 10,
+                        menuItems[selectedItemIndex].getPosition().y + menuItems[selectedItemIndex].getGlobalBounds().height / 2 - iconSprite.getGlobalBounds().height / 2);
+                }
+                else if (event.key.code == sf::Keyboard::Down)
+                {
+                    menuItems[selectedItemIndex].setFillColor(sf::Color::White);
+                    selectedItemIndex = (selectedItemIndex + 1) % menuItems.size();
+                    menuItems[selectedItemIndex].setFillColor(sf::Color(238, 26, 118));
+                    iconSprite.setPosition(
+                        menuItems[selectedItemIndex].getPosition().x - iconSprite.getGlobalBounds().width - 10,
+                        menuItems[selectedItemIndex].getPosition().y + menuItems[selectedItemIndex].getGlobalBounds().height / 2 - iconSprite.getGlobalBounds().height / 2);
+                }
+                else if (event.key.code == sf::Keyboard::Return)
+                {
+                    if (selectedItemIndex == 0)
+                    {
+                        endWindow.close();
+                        cv::VideoCapture newCap(0);
+                        if (!newCap.isOpened())
+                        {
+                            std::cerr << "Error: Could not open the camera." << std::endl;
+                            return;
+                        }
+                        runSingleMode(newCap);
+                    }
+                    else if (selectedItemIndex == 1)
+                    {
+                        endWindow.close();
+                    }
+                }
+            }
         }
 
         endWindow.clear();
         endWindow.draw(backgroundSprite);
         endWindow.draw(resultText);
+        for (const auto &menuItem : menuItems)
+        {
+            endWindow.draw(menuItem);
+        }
+        endWindow.draw(iconSprite);
         endWindow.display();
     }
 }
