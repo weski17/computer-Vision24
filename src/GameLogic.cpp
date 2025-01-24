@@ -107,6 +107,8 @@ void GameLogic::drawScore(cv::Mat &frame)
                 cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(238, 26, 118), 2);
     cv::putText(frame, "Winning Score: 15", cv::Point(10, frame.rows - 20),
                 cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
+    cv::putText(frame, "Winning Score: 10", cv::Point(10, 150),
+                cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(88, 80, 171), 2);
 }
 
 void GameLogic::displayEndScreen()
@@ -121,6 +123,9 @@ void GameLogic::displayEndScreen()
     }
     sf::Sprite backgroundSprite;
     backgroundSprite.setTexture(backgroundTexture);
+    backgroundSprite.setScale(
+        static_cast<float>(endWindow.getSize().x) / backgroundTexture.getSize().x,
+        static_cast<float>(endWindow.getSize().y) / backgroundTexture.getSize().y);
 
     sf::Font font;
     if (!font.loadFromFile("font/Game-Of-Squids.ttf"))
@@ -134,17 +139,25 @@ void GameLogic::displayEndScreen()
     resultText.setCharacterSize(50);
     resultText.setFillColor(sf::Color::White);
     resultText.setStyle(sf::Text::Bold);
-    resultText.setPosition(200, 250);
+    resultText.setPosition(
+        (endWindow.getSize().x - resultText.getLocalBounds().width) / 2,
+        (endWindow.getSize().y - resultText.getLocalBounds().height) / 2);
 
     const int targetScore = 15; // Beispielziel
     if (score >= targetScore)
     {
         resultText.setString("Success! Score: " + std::to_string(score));
+        resultText.setPosition(
+            (endWindow.getSize().x - resultText.getLocalBounds().width) / 2,
+            (endWindow.getSize().y - resultText.getLocalBounds().height) / 2);
         resultText.setFillColor(sf::Color::Blue);
     }
     else
     {
         resultText.setString("Failed! Score: " + std::to_string(score));
+        resultText.setPosition(
+            (endWindow.getSize().x - resultText.getLocalBounds().width) / 2,
+            (endWindow.getSize().y - resultText.getLocalBounds().height) / 2);
         resultText.setFillColor(sf::Color::Red);
     }
 
