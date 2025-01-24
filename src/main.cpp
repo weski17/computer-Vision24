@@ -56,7 +56,7 @@ int main() {
         // Fenster aktualisieren
 
         window.clear();
-        startMenu.draw(window);
+        menu.draw(window);
         window.display();
     }
 
