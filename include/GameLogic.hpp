@@ -20,6 +20,7 @@ private:
 
     void handleCollisions(const std::vector<cv::Point> &contour);
     void drawScore(cv::Mat &frame);
+    void displayEndScreen(); // Deklaration der Methode für den Endbildschirm
 };
 
 #endif // GAMELOGIC_HPP

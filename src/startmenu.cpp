@@ -50,7 +50,7 @@ StartMenu::StartMenu(float width, float height)
     {
         menu[i].setFont(font);
         menu[i].setString(options[i]);
-        menu[i].setFillColor(i == 0 ? sf::Color(255, 0, 29) : sf::Color::White); // Markiert als ausgewählte Option
+        menu[i].setFillColor(i == 0 ? sf::Color(238, 26, 118) : sf::Color::White); // Markiert als ausgewählte Option
         menu[i].setCharacterSize(25);
         menu[i].setPosition((width - menu[i].getGlobalBounds().width) / 2,
                             height / (MAX_NUMBER_OF_ITEMS + 1) * (i + 1) + verticalOffset);
@@ -86,7 +86,7 @@ void StartMenu::MoveUp()
     {
         menu[selectedItemIndex].setFillColor(sf::Color::White); // Alte Auswahlfarbe zurücksetzen
         selectedItemIndex--;
-        menu[selectedItemIndex].setFillColor(sf::Color(255, 0, 29));  // Neue Auswahl markieren
+        menu[selectedItemIndex].setFillColor(sf::Color(238, 26, 118)); // Neue Auswahl markieren
         updateIconPosition(backgroundSprite.getGlobalBounds().width); // Symbol neu positionieren
     }
 }
@@ -100,7 +100,7 @@ void StartMenu::MoveDown()
     {
         menu[selectedItemIndex].setFillColor(sf::Color::White); // Alte Auswahlfarbe zurücksetzen
         selectedItemIndex++;
-        menu[selectedItemIndex].setFillColor(sf::Color(255, 0, 29));  // Neue Auswahl markieren
+        menu[selectedItemIndex].setFillColor(sf::Color(238, 26, 118)); // Neue Auswahl markieren
         updateIconPosition(backgroundSprite.getGlobalBounds().width); // Symbol neu positionieren
     }
 }
