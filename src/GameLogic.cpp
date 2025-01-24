@@ -37,11 +37,10 @@ void GameLogic::runSingleMode(cv::VideoCapture &cap)
             // Füge Bälle hinzu und zeichne sie
             frame = addBallsToPicture(frame);
 
-            // Zeichne die Kontur der verfolgten Person
+            // Keine Konturen zeichnen, nur intern verwenden
             if (!contour.empty())
             {
-                std::vector<std::vector<cv::Point>> contoursToDraw = {contour};
-                cv::drawContours(frame, contoursToDraw, -1, cv::Scalar(0, 255, 0), 2); // Grün
+                // Die Kontur bleibt intern verfügbar für die Kollisionserkennung
             }
 
             // Kollisionen prüfen
