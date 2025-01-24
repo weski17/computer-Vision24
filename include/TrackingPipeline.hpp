@@ -42,13 +42,15 @@ public:
      */
     const std::vector<cv::Point>& getTrackedContour() const;
 
-private:
+
     /**
      * @brief Führt Hintergrundsubtraktion mittels KNN durch.
      * @param frame Eingabeframe.
      * @return Ergebnisframe nach Subtraktion.
      */
     cv::Mat applyKnn(const cv::Mat& frame);
+
+private:
 
     /**
      * @brief Erkennt und verfolgt Personen im Frame.

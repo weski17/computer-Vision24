@@ -116,9 +116,8 @@ cv::Mat TrackingPipeline::applyKnn(const cv::Mat &frame)
     return backgroundSubtraction.improveMask(knn);
 }
 
-// Personen erkennen und verfolgen
-void TrackingPipeline::detectAndTrackPersons(const cv::Mat &frame)
-{
+void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
+
     cv::Mat fgMask = applyKnn(frame);
 
     // Konturen finden
@@ -141,13 +140,16 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat &frame)
     if (!largestContour.empty())
     {
         isTracking = true;
-        trackedPerson.setContour(largestContour);
+
+        // Keypoints aus der größten Kontur extrahieren
         extractKeypoints(largestContour);
+
+        // Optical Flow anwenden, um Keypoints zu verfeinern
         applyOpticalFlow(frame);
 
-        // Kalman-Filter aktualisieren
-        if (!trackedPoints.empty())
-        {
+        // Kalman-Filter aktualisieren und neue Position schätzen
+        if (!trackedPoints.empty()) {
+
             cv::Point2f meanPoint(0, 0);
             for (const auto &point : trackedPoints)
             {
@@ -155,12 +157,15 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat &frame)
             }
             meanPoint.x /= trackedPoints.size();
             meanPoint.y /= trackedPoints.size();
+
+            // Kalman-Filter aktualisieren
             updateKalmanFilter(cv::Point(static_cast<int>(meanPoint.x), static_cast<int>(meanPoint.y)));
         }
-    }
-    else
-    {
-        // Neu hinzugefügt: Reset des Trackings, wenn keine Konturen gefunden werden
+
+        // Nach der Verarbeitung die Kontur speichern
+        trackedPerson.setContour(largestContour,frame);
+    } else {
+
         isTracking = false;
         trackedPoints.clear();
         trackedPerson.setContour(std::vector<cv::Point>());
@@ -221,9 +226,26 @@ void TrackingPipeline::updateKalmanFilter(const cv::Point &measuredPoint)
 }
 
 // Frame verarbeiten
-void TrackingPipeline::processFrame(cv::Mat &frame)
-{
-    generateGroundTruth(frame);
+void TrackingPipeline::processFrame(cv::Mat& frame) {
+    static cv::VideoWriter writer;
+    static bool isWriterInitialized = false;
+    const std::string outputPath = "data/output/video2.avi";
+
+    // VideoWriter initialisieren
+    if (!isWriterInitialized) {
+        int codec = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+        double fps = 30;
+        cv::Size frameSize(frame.cols, frame.rows);
+
+        writer.open(outputPath, codec, fps, frameSize, true);
+        if (!writer.isOpened()) {
+            return;
+        }
+        isWriterInitialized = true;
+    }
+
+    // Tracking- und Visualisierungslogik
+    
     detectAndTrackPersons(frame);
     visualizeResults(frame);
 }

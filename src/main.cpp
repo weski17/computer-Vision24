@@ -1,43 +1,69 @@
+/**
+ * @file main.cpp
+ * @brief Hauptprogramm für das Eye Track-Projekt.
+ *
+ * Dieses Programm implementiert ein Startmenü mit SFML, führt Hintergrundsubtraktion, Multi-Object-Tracking
+ * und andere Bildverarbeitungsaufgaben durch. Es verwendet OpenCV für die Bildverarbeitung
+ * und SFML für die Benutzeroberfläche.
+ */
+
 #include <SFML/Graphics.hpp>
 #include "startmenu.hpp"
 #include "BackgroundSubtractionPipeline.hpp"
 #include "TrackingPipeline.hpp"
+#include "Person.hpp"
+#include "MultiTracking.hpp"
 #include "GameLogic.hpp"
 #include <opencv2/opencv.hpp>
 
-int main()
-{
-    const int windowWidth = 800;
-    const int windowHeight = 600;
+/**
+ * @brief Der Einstiegspunkt des Programms.
+ *
+ * Dieses Programm zeigt ein Startmenü und führt die Bildverarbeitung auf einem Video durch.
+ * Es verwendet SFML für die Benutzeroberfläche und OpenCV für die Bildverarbeitungsfunktionen.
+ *
+ * @return `0`, wenn das Programm erfolgreich beendet wird. Andernfalls `-1`, wenn die
+ *         Initialisierung fehlschlägt.
+ */
+int main() {
+    const int windowWidth = 800; ///< Breite des SFML-Fensters.
+    const int windowHeight = 600; ///< Höhe des SFML-Fensters.
+    
+    // Erstellen des SFML-Fensters
+    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Eye Track");
 
-    // Erstelle ein Fenster für das Menü
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Start Menu");
+    // Initialisierung der Komponenten
+    StartMenu menu(windowWidth, windowHeight); ///< Startmenü-Objekt.
+    BackgroundSubtractionPipeline pipeline; ///< Pipeline für die Hintergrundsubtraktion.
+    TrackingPipeline tracking; ///< Pipeline für das Tracking.
+    MultiTracking multiTracking; ///< Multi-Object-Tracking-Objekt.
 
-    // Initialisiere das Startmenü
-    StartMenu startMenu(windowWidth, windowHeight);
+    const std::string videoPath = "data/input/video/ueberlappungAus.mp4"; ///< Pfad zum Eingabevideo.
+    const std::string outputPath = "data/output/fotos"; ///< Pfad zum Ausgabeverzeichnis.
+    cv::VideoCapture cap; ///< OpenCV-Videoaufnahmeobjekt.
+    cv::Mat groundTruthMask; ///< Ground-Truth-Maske für die Verarbeitung.
 
-    // Initialisiere Tracking-Pipeline und andere benötigte Komponenten
-    TrackingPipeline tracking;
-    BackgroundSubtractionPipeline pipeline;
-    cv::VideoCapture cap(0);
-    if (!cap.isOpened())
-    {
-        std::cerr << "Fehler: Webcam konnte nicht geöffnet werden!" << std::endl;
-        return -1;
+    // Initialisierung der Videoverarbeitung und Laden der Ground-Truth-Maske
+    if (!pipeline.initializeVideoAndLoadGroundTruth(videoPath, cap, groundTruthMask, outputPath)) {
+        return -1; ///< Beenden, falls die Initialisierung fehlschlägt.
     }
-    cv::Mat groundTruthMask; // Leere Maske (für spätere Nutzung)
 
-    // Menü-Schleife
-    while (window.isOpen())
-    {
-        // Verarbeite Benutzerereignisse im Menü
-        startMenu.processEvents(window, pipeline, tracking, cap, groundTruthMask);
+    // Hauptschleife für das SFML-Fenster
+    while (window.isOpen()) {
+        // Ereignisverarbeitung
+        menu.processEvents(window, pipeline, tracking, multiTracking, cap, groundTruthMask);
 
-        // Zeichne das Menü
+        // Fenster aktualisieren
+
         window.clear();
         startMenu.draw(window);
         window.display();
     }
+
+    // Ressourcen freigeben
+    cap.release(); ///< Freigeben des Videoaufnahmeobjekts.
+    pipeline.releaseVideoWriters(); ///< Freigeben der Videoausgabeobjekte.
+    cv::destroyAllWindows(); ///< Schließen aller OpenCV-Fenster.
 
     return 0;
 }

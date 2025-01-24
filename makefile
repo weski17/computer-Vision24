@@ -5,7 +5,7 @@ CXX = g++
 CXXFLAGS = -Wall -std=c++17 `pkg-config --cflags opencv4`
 
 # SFML- und OpenCV-Bibliotheken
-LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio `pkg-config --libs opencv4`
+LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio `pkg-config --libs opencv4` -lstdc++fs
 
 # Name der ausführbaren Datei
 TARGET = startmenu
@@ -20,10 +20,12 @@ SRCS = $(SRC_DIR)/main.cpp \
        $(SRC_DIR)/BackgroundSubtractionPipeline.cpp \
        $(SRC_DIR)/TrackingPipeline.cpp \
        $(SRC_DIR)/Person.cpp \
+       $(SRC_DIR)/MultiTracking.cpp\
        $(SRC_DIR)/Video.cpp \
        $(SRC_DIR)/Ball.cpp \
        $(SRC_DIR)/BallFunktions.cpp \
-       $(SRC_DIR)/GameLogic.cpp  # <-- Hinzugefügt: GameLogic.cpp
+       $(SRC_DIR)/GameLogic.cpp
+
 
 # Objekt-Dateien (erzeugt entsprechende Objektdateien im Quellverzeichnis)
 OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(SRC_DIR)/%.o)

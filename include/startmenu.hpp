@@ -5,6 +5,7 @@
 #include <SFML/Audio.hpp>
 #include "BackgroundSubtractionPipeline.hpp"
 #include "TrackingPipeline.hpp"
+#include "MultiTracking.hpp" 
 #include <opencv2/opencv.hpp>
 #define MAX_NUMBER_OF_ITEMS 4  ///< Anzahl der Menüoptionen
 
@@ -69,7 +70,7 @@ public:
      * @param cap Videoquelle zur Verarbeitung
      * @param groundTruthMask Ground-Truth-Maske für Hintergrundsubtraktion
      */
-    void processEvents(sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking,
+    void processEvents(sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking, MultiTracking &multiTracking,
                        cv::VideoCapture &cap, const cv::Mat &groundTruthMask);
 
     // Hilfsmethoden zur Positionierung der Menüoptionen und Symbole
@@ -86,7 +87,7 @@ private:
      * @param cap Videoquelle zur Verarbeitung
      * @param groundTruthMask Ground-Truth-Maske für Hintergrundsubtraktion
      */
-    void handleMenuSelection(MenuOption selectedOption, sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline,TrackingPipeline &tracking,
+    void handleMenuSelection(MenuOption selectedOption, sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline,TrackingPipeline &tracking, MultiTracking &multiTracking,
                              cv::VideoCapture &cap, const cv::Mat &groundTruthMask);
 
     int selectedItemIndex;                    ///< Aktuell ausgewählte Menüoption

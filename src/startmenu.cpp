@@ -187,7 +187,7 @@ sf::Sprite &StartMenu::getIconSprite()
  * @param groundTruthMask Die Ground-Truth-Maske
  */
 void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow &window,
-                                    BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking,
+                                    BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking, MultiTracking &multiTracking,
                                     cv::VideoCapture &cap,
                                     const cv::Mat &groundTruthMask)
 {
@@ -243,18 +243,51 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
         // Erstelle die Spiel-Logik
         GameLogic gameLogic(tracking);
 
-        // Starte den Single Mode
-        gameLogic.runSingleMode(cap);
-        break;
-    }
-    case MultiMode:
-        std::cout << "Multi Mode (später hinzuzufügen)" << std::endl;
-        break;
-    case Exit:
-        std::cout << "Programm wird beendet." << std::endl;
-        window.close();
-        cv::destroyAllWindows(); // Alle Fenster schließen
-        break;
+                if (cv::waitKey(30) == 'q') {
+                    std::cout << "Single Mode manuell beendet." << std::endl;
+                    break;
+                }
+            }
+            cv::destroyAllWindows(); // Fenster schließen
+            break;
+        }
+
+        case MultiMode: {
+            std::cout << "Multi Mode gestartet" << std::endl;
+            window.close();
+
+            cv::Mat frame;
+            while (true) {
+                cap >> frame;
+                if (frame.empty()) {
+                    std::cout << "Video-Tracking abgeschlossen." << std::endl;
+                    break;
+                }
+
+                try {
+                    // Komplettes Tracking in einer Methode
+                    multiTracking.processFrame(frame);
+                    // Ergebnisse anzeigen
+                } catch (const std::exception &e) {
+                    std::cerr << "Fehler beim Tracking: " << e.what() << std::endl;
+                    break;
+                }
+
+                if (cv::waitKey(30) == 'q') {
+                    std::cout << "Single Mode manuell beendet." << std::endl;
+                    break;
+                }
+            }
+            cv::destroyAllWindows(); // Fenster schließen
+            break;
+        }
+
+        case Exit:
+            std::cout << "Programm wird beendet." << std::endl;
+            window.close();
+            cv::destroyAllWindows(); // Alle Fenster schließen
+            break;
+
     }
 }
 
@@ -266,9 +299,10 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
  * @param cap Die Videoquelle
  * @param groundTruthMask Die Ground-Truth-Maske
  */
-void StartMenu::processEvents(sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking,
-                              cv::VideoCapture &cap, const cv::Mat &groundTruthMask)
-{
+ 
+void StartMenu::processEvents(sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking, MultiTracking &multiTracking,
+                              cv::VideoCapture &cap, const cv::Mat &groundTruthMask) {
+
     sf::Event event;
     while (window.pollEvent(event))
     {
@@ -290,7 +324,9 @@ void StartMenu::processEvents(sf::RenderWindow &window, BackgroundSubtractionPip
             {
                 stopMusic();
                 MenuOption selectedOption = static_cast<MenuOption>(GetPressedItem());
-                handleMenuSelection(selectedOption, window, pipeline, tracking, cap, groundTruthMask);
+
+                handleMenuSelection(selectedOption, window, pipeline,tracking, multiTracking, cap, groundTruthMask);
+
             }
         }
     }
