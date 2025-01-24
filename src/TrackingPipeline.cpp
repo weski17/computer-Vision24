@@ -168,7 +168,7 @@ void TrackingPipeline::detectAndTrackPersons(const cv::Mat& frame) {
 
         isTracking = false;
         trackedPoints.clear();
-        trackedPerson.setContour(std::vector<cv::Point>());
+        trackedPerson.setContour(std::vector<cv::Point>(), frame);
     }
 }
 

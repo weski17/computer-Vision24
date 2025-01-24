@@ -306,7 +306,7 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame,  std::vector<std::vec
                 measurement.at<float>(1) = newCentroid.y;
                 kalmanFilters[trackId].correct(measurement);
             } else {
-                std::cerr << "Kalman-Filter für Track ID " << trackId << " nicht gefunden." << std::endl;
+                
             }
         }
     }
@@ -386,7 +386,7 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
     int n = costMatrix.size();    // Anzahl der Tracks (Zeilen)
     int m = costMatrix[0].size(); // Anzahl der Konturen (Spalten)
 
-    std::cout << "Dimensionen der Matrix: " << n << " x " << m << std::endl;
+    
 
     // Schritt 1: Zeilenreduktion
     std::vector<std::vector<double>> reducedMatrix = costMatrix;
@@ -395,14 +395,6 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
         for (int j = 0; j < m; ++j) {
             reducedMatrix[i][j] -= rowMin;
         }
-    }
-
-    std::cout << "Matrix nach Zeilenreduktion:" << std::endl;
-    for (const auto& row : reducedMatrix) {
-        for (double cost : row) {
-            std::cout << cost << " ";
-        }
-        std::cout << std::endl;
     }
 
     // Schritt 2: Spaltenreduktion
@@ -416,13 +408,6 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
         }
     }
 
-    std::cout << "Matrix nach Spaltenreduktion:" << std::endl;
-    for (const auto& row : reducedMatrix) {
-        for (double cost : row) {
-            std::cout << cost << " ";
-        }
-        std::cout << std::endl;
-    }
 
     // Zuordnung finden
     std::vector<int> assignment(n, -1);
@@ -531,7 +516,7 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
 
             // Filter: Zeichne nur Keypoints innerhalb der Bounding-Box
             if (boundingBox.contains(point)) {
-               cv::circle(output, point, 3, cv::Scalar(0, 255, 200), -1); // Grün für Keypoints
+                cv::circle(output, point, 3, cv::Scalar(0, 255, 0), -1); // Grün für Keypoints
             }
         }
     }
@@ -683,6 +668,4 @@ void MultiTracking::processFrame(const cv::Mat& frame) {
     // FPS berechnen
     measureFPS(frame);
 
-    // Debugging: Zeige den aktuellen Frame-Zähler
-    std::cout << "Aktueller Frame: " << frameCounter << std::endl;
 }

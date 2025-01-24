@@ -189,8 +189,7 @@ sf::Sprite &StartMenu::getIconSprite()
 void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow &window,
                                     BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking, MultiTracking &multiTracking,
                                     cv::VideoCapture &cap,
-                                    const cv::Mat &groundTruthMask)
-{
+                                    const cv::Mat &groundTruthMask){
     switch (selectedOption)
     {
     case BackgroundSubtraction:
@@ -232,8 +231,7 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
         cv::destroyAllWindows(); // Fenster schließen
         break;
     }
-    case SingleMode:
-    {
+    case SingleMode:{
         std::cout << "Single Mode gestartet." << std::endl;
         window.close();
 
@@ -243,14 +241,10 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
         // Erstelle die Spiel-Logik
         GameLogic gameLogic(tracking);
 
-                if (cv::waitKey(30) == 'q') {
-                    std::cout << "Single Mode manuell beendet." << std::endl;
-                    break;
-                }
-            }
-            cv::destroyAllWindows(); // Fenster schließen
-            break;
-        }
+        // Starte den Single Mode
+        gameLogic.runSingleMode(cap);
+        break;
+    }
 
         case MultiMode: {
             std::cout << "Multi Mode gestartet" << std::endl;
@@ -301,8 +295,8 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
  */
  
 void StartMenu::processEvents(sf::RenderWindow &window, BackgroundSubtractionPipeline &pipeline, TrackingPipeline &tracking, MultiTracking &multiTracking,
-                              cv::VideoCapture &cap, const cv::Mat &groundTruthMask) {
-
+                              cv::VideoCapture &cap, const cv::Mat &groundTruthMask)
+{
     sf::Event event;
     while (window.pollEvent(event))
     {
@@ -324,9 +318,7 @@ void StartMenu::processEvents(sf::RenderWindow &window, BackgroundSubtractionPip
             {
                 stopMusic();
                 MenuOption selectedOption = static_cast<MenuOption>(GetPressedItem());
-
-                handleMenuSelection(selectedOption, window, pipeline,tracking, multiTracking, cap, groundTruthMask);
-
+                handleMenuSelection(selectedOption, window, pipeline, tracking, multiTracking, cap, groundTruthMask);
             }
         }
     }
