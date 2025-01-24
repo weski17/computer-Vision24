@@ -13,8 +13,8 @@
 #include "TrackingPipeline.hpp"
 #include "Person.hpp"
 #include "MultiTracking.hpp"
+#include "GameLogic.hpp"
 #include <opencv2/opencv.hpp>
-#include <iostream>
 
 /**
  * @brief Der Einstiegspunkt des Programms.
@@ -54,9 +54,9 @@ int main() {
         menu.processEvents(window, pipeline, tracking, multiTracking, cap, groundTruthMask);
 
         // Fenster aktualisieren
+
         window.clear();
-        menu.draw(window);
-        window.draw(menu.getIconSprite());
+        startMenu.draw(window);
         window.display();
     }
 
