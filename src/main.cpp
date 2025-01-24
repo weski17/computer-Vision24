@@ -2,41 +2,42 @@
 #include "startmenu.hpp"
 #include "BackgroundSubtractionPipeline.hpp"
 #include "TrackingPipeline.hpp"
-#include "Person.hpp" 
+#include "GameLogic.hpp"
 #include <opencv2/opencv.hpp>
-#include <iostream>
 
-int main() {
+int main()
+{
     const int windowWidth = 800;
     const int windowHeight = 600;
-    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Eye Track");
 
-    StartMenu menu(windowWidth, windowHeight);
-    BackgroundSubtractionPipeline pipeline;
+    // Erstelle ein Fenster für das Menü
+    sf::RenderWindow window(sf::VideoMode(windowWidth, windowHeight), "Start Menu");
+
+    // Initialisiere das Startmenü
+    StartMenu startMenu(windowWidth, windowHeight);
+
+    // Initialisiere Tracking-Pipeline und andere benötigte Komponenten
     TrackingPipeline tracking;
-    const std::string videoPath = "data/input/video/normaleBewegung_D.mp4";
-    const std::string outputPath = "data/output/fotos";
-    cv::VideoCapture cap;
-    cv::Mat groundTruthMask;
+    BackgroundSubtractionPipeline pipeline;
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened())
+    {
+        std::cerr << "Fehler: Webcam konnte nicht geöffnet werden!" << std::endl;
+        return -1;
+    }
+    cv::Mat groundTruthMask; // Leere Maske (für spätere Nutzung)
 
-if (!pipeline.initializeVideoAndLoadGroundTruth(videoPath, cap, groundTruthMask, outputPath)) {
-    return -1;  // Beenden, falls Initialisierung fehlschlägt
-}
+    // Menü-Schleife
+    while (window.isOpen())
+    {
+        // Verarbeite Benutzerereignisse im Menü
+        startMenu.processEvents(window, pipeline, tracking, cap, groundTruthMask);
 
-    // Hauptfensterschleife
-    while (window.isOpen()) {
-        menu.processEvents(window, pipeline,tracking, cap, groundTruthMask);
-        
+        // Zeichne das Menü
         window.clear();
-        menu.draw(window);
-        window.draw(menu.getIconSprite());
+        startMenu.draw(window);
         window.display();
     }
-
-    // Ressourcen freigeben
-    cap.release();
-    pipeline.releaseVideoWriters();
-    cv::destroyAllWindows();
 
     return 0;
 }

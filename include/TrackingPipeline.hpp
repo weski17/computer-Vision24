@@ -36,6 +36,12 @@ public:
      */
     void generateGroundTruth(const cv::Mat& frame);
 
+    /**
+     * @brief Gibt den Kontur der aktuell verfolgten Person zurück.
+     * @return Kontur der Person als Vektor von Punkten.
+     */
+    const std::vector<cv::Point>& getTrackedContour() const;
+
 private:
     /**
      * @brief Führt Hintergrundsubtraktion mittels KNN durch.
