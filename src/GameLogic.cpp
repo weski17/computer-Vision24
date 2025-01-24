@@ -1,3 +1,4 @@
+// GameLogic.cpp
 #include "GameLogic.hpp"
 #include "Video.hpp"
 #include <iostream>
@@ -11,6 +12,9 @@ GameLogic::~GameLogic() {}
 
 void GameLogic::runSingleMode(cv::VideoCapture &cap)
 {
+    // Create a resizable OpenCV window
+    cv::namedWindow("Single Mode", cv::WINDOW_NORMAL);
+
     cv::Mat frame;
     sf::Clock clock;                      // Timer für das Spiel
     sf::Time timeLimit = sf::seconds(60); // Zeitbegrenzung auf 1 Minute
