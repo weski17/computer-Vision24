@@ -531,7 +531,7 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
 
             // Filter: Zeichne nur Keypoints innerhalb der Bounding-Box
             if (boundingBox.contains(point)) {
-                cv::circle(output, point, 3, cv::Scalar(0, 255, 0), -1); // Grün für Keypoints
+               cv::circle(output, point, 3, cv::Scalar(0, 255, 200), -1); // Grün für Keypoints
             }
         }
     }

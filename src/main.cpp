@@ -38,7 +38,7 @@ int main() {
     TrackingPipeline tracking; ///< Pipeline für das Tracking.
     MultiTracking multiTracking; ///< Multi-Object-Tracking-Objekt.
 
-    const std::string videoPath = "data/input/video/drei.mp4"; ///< Pfad zum Eingabevideo.
+    const std::string videoPath = "data/input/video/ueberlappungAus.mp4"; ///< Pfad zum Eingabevideo.
     const std::string outputPath = "data/output/fotos"; ///< Pfad zum Ausgabeverzeichnis.
     cv::VideoCapture cap; ///< OpenCV-Videoaufnahmeobjekt.
     cv::Mat groundTruthMask; ///< Ground-Truth-Maske für die Verarbeitung.
