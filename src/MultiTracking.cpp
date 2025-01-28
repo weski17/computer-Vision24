@@ -5,7 +5,7 @@
  * Diese Datei enthält die Implementierung der MultiTracking-Klasse, die für die
  * Verarbeitung von Videoframes, Hintergrundsubtraktion, Konturenerkennung, Zuordnung
  * von Konturen zu Tracks, Anwendung von Optical Flow und Aktualisierung von Kalman-Filtern
- * verantwortlich ist.
+ * verantwortlich ist. Zudem werden verschiedene Tracking-Metriken berechnet.
  */
 
 #include "MultiTracking.hpp"
@@ -40,7 +40,7 @@ MultiTracking::~MultiTracking() {}
  * @brief Initialisiert den Kalman-Filter für eine gegebene Person.
  *
  * Erstellt und konfiguriert einen Kalman-Filter für die gegebene Person basierend auf deren
- * aktuellen Mittelpunkt (Centroid). Der Kalman-Filter wird dann in der `kalmanFilters`-Map
+ * aktuellem Mittelpunkt (Centroid). Der Kalman-Filter wird dann in der `kalmanFilters`-Map
  * mit der entsprechenden Personen-ID gespeichert.
  *
  * @param person Die zu verfolgende Person, für die der Kalman-Filter initialisiert wird.
@@ -157,7 +157,7 @@ void MultiTracking::assignContoursToTracks(const std::vector<std::vector<cv::Poi
 
             // Gesamtkosten berechnen
             double totalCost = 0.4 * distance + 0.2 * areaDifference + 0.2 * aspectRatioDifference + 0.2 * (1 - histogramSimilarity);   
-            if (totalCost > 250.0) {
+            if (totalCost > 80.0) {
                 totalCost = 1e9; 
             }
 
@@ -306,7 +306,7 @@ void MultiTracking::applyOpticalFlow(const cv::Mat& frame,  std::vector<std::vec
                 measurement.at<float>(1) = newCentroid.y;
                 kalmanFilters[trackId].correct(measurement);
             } else {
-                
+                std::cerr << "Kalman-Filter für Track ID " << trackId << " nicht gefunden." << std::endl;
             }
         }
     }
@@ -355,7 +355,7 @@ void MultiTracking::updateKalmanFilters() {
 }
 
 /**
- * @brief Führt den ungarischen Algorithmus zur Zuordnung von Tracks zu Konturen durch.
+ * @brief Implementiert den ungarischen Algorithmus zur Zuordnung von Tracks zu Konturen.
  *
  * Implementiert den ungarischen Algorithmus, um die optimale Zuordnung zwischen bestehenden
  * Tracks und neuen Konturen basierend auf der Kostenmatrix zu finden. Gibt einen Vektor
@@ -386,8 +386,6 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
     int n = costMatrix.size();    // Anzahl der Tracks (Zeilen)
     int m = costMatrix[0].size(); // Anzahl der Konturen (Spalten)
 
-    
-
     // Schritt 1: Zeilenreduktion
     std::vector<std::vector<double>> reducedMatrix = costMatrix;
     for (int i = 0; i < n; ++i) {
@@ -407,7 +405,6 @@ std::vector<int> MultiTracking::hungarianAlgorithm(const std::vector<std::vector
             reducedMatrix[i][j] -= colMin;
         }
     }
-
 
     // Zuordnung finden
     std::vector<int> assignment(n, -1);
@@ -489,7 +486,7 @@ void MultiTracking::visualize(const cv::Mat& frame) const {
         cv::Rect boundingBox = cv::boundingRect(person.getContour());
 
         // Farbauswahl basierend auf der ID
-        cv::Scalar color = cv::Scalar(0, 255 - person.getId() * 50, 255); // Unterschiedliche Farben für verschiedene IDs
+        cv::Scalar color = cv::Scalar(0, 255 - (person.getId() * 50) % 255, 255); // Unterschiedliche Farben für verschiedene IDs
 
         // Zeichne die Bounding Box
         cv::rectangle(output, boundingBox, color, 2); // Rechteck mit der definierten Farbe
@@ -640,6 +637,12 @@ void MultiTracking::measureFPS(const cv::Mat& frame) {
 void MultiTracking::processFrame(const cv::Mat& frame) {
     static int frameCounter = 0; // Statischer Frame-Zähler
 
+    static bool groundTruthLoaded = false;
+    if (!groundTruthLoaded) {
+       // loadGroundTruth("rsrc/annotations.xml", frameCounter);
+        groundTruthLoaded = true;
+    }
+
     // Frame-Zähler erhöhen
     frameCounter++;
 
@@ -668,4 +671,389 @@ void MultiTracking::processFrame(const cv::Mat& frame) {
     // FPS berechnen
     measureFPS(frame);
 
+}
+
+/**
+ * @brief Lädt die Ground-Truth-Daten aus einer XML-Datei.
+ *
+ * Verwendet TinyXML2, um die XML-Datei zu laden und speichert die Bounding Boxes für jeden Frame
+ * in der `groundTruthData`-Map.
+ *
+ * @param xmlFilePath Pfad zur XML-Datei mit den Ground-Truth-Daten.
+ * @param frameCounter Referenz auf den Frame-Zähler (wird nicht verwendet und kann entfernt werden).
+ */
+void MultiTracking::loadGroundTruth(const std::string& xmlFilePath, int& frameCounter) {
+    tinyxml2::XMLDocument doc;
+
+    // Debug: Start des Ladevorgangs
+    std::cout << "Starte das Laden der Ground-Truth-Daten aus: " << xmlFilePath << std::endl;
+
+    // Laden der XML-Datei
+    if (doc.LoadFile(xmlFilePath.c_str()) != tinyxml2::XML_SUCCESS) {
+        std::cerr << "Fehler beim Laden der XML-Datei: " << xmlFilePath 
+                  << ". Fehler: " << doc.ErrorName() << std::endl;
+        return;
+    }
+
+    // Wurzelelement prüfen
+    tinyxml2::XMLElement* root = doc.FirstChildElement("annotations");
+    if (!root) {
+        std::cerr << "Kein <annotations>-Element gefunden. Überprüfen Sie die XML-Struktur!" << std::endl;
+        return;
+    }
+
+    // Debug: Anzahl der Tracks
+    int trackCount = 0;
+
+    // Iterieren durch alle Tracks in der XML-Datei
+    for (tinyxml2::XMLElement* track = root->FirstChildElement("track"); track; track = track->NextSiblingElement("track")) {
+        int id = track->IntAttribute("id");
+        if (id < 0) {
+            std::cerr << "Warnung: Track-ID ist negativ (" << id << "). Überspringe diesen Track." << std::endl;
+            continue;
+        }
+
+        trackCount++;
+        std::cout << "Lade Track mit ID: " << id << std::endl;
+
+        int boxCount = 0; // Debug: Anzahl der Bounding Boxes pro Track
+
+        // Iterieren durch alle Bounding Boxes des Tracks
+        for (tinyxml2::XMLElement* box = track->FirstChildElement("box"); box; box = box->NextSiblingElement("box")) {
+            int frame = box->IntAttribute("frame");
+            float xtl = box->FloatAttribute("xtl");
+            float ytl = box->FloatAttribute("ytl");
+            float xbr = box->FloatAttribute("xbr");
+            float ybr = box->FloatAttribute("ybr");
+
+            // Debug: Bounding Box-Details
+            std::cout << "  - Box: Frame=" << frame << ", xtl=" << xtl << ", ytl=" << ytl
+                      << ", xbr=" << xbr << ", ybr=" << ybr << std::endl;
+
+            // Validierung der Bounding Box-Werte
+            if (xtl < 0 || ytl < 0 || xbr <= xtl || ybr <= ytl) {
+                std::cerr << "  Warnung: Ungültige Bounding Box-Werte für Frame " << frame 
+                          << ". Box wird übersprungen." << std::endl;
+                continue;
+            }
+
+            // Bounding Box speichern
+            BoundingBox bbox(frame, id, xtl, ytl, xbr, ybr);
+            groundTruthData[frame].push_back(bbox);
+            boxCount++;
+        }
+
+        // Debug: Anzahl der Bounding Boxes für den aktuellen Track
+        std::cout << "  -> " << boxCount << " Bounding Boxes für Track ID " << id << " geladen." << std::endl;
+    }
+
+    // Debug: Gesamte Anzahl der Tracks und Bounding Boxes
+    std::cout << "Ground-Truth-Ladevorgang abgeschlossen. Geladene Tracks: " << trackCount << std::endl;
+
+    // Optional: Anzahl der Bounding Boxes pro Frame anzeigen
+    for (const auto& [frame, boxes] : groundTruthData) {
+        std::cout << "Frame " << frame << ": " << boxes.size() << " Bounding Boxes geladen." << std::endl;
+    }
+}
+
+/**
+ * @brief Berechnet die Intersection over Union (IoU) zwischen zwei Bounding Boxes.
+ *
+ * Die IoU misst die Überlappung zwischen zwei Bounding Boxes im Verhältnis zur Union ihrer Flächen.
+ * Ein Wert von 1.0 bedeutet vollständige Überlappung, 0.0 keine Überlappung.
+ *
+ * @param box1 Erste Bounding Box.
+ * @param box2 Zweite Bounding Box.
+ * @return IoU-Wert zwischen den beiden Bounding Boxes.
+ */
+float MultiTracking::calculateIoU(const BoundingBox& box1, const BoundingBox& box2) const {
+    // Berechnung der Schnittfläche
+    float xIntersection = std::max(0.0f, std::min(box1.xbr, box2.xbr) - std::max(box1.xtl, box2.xtl));
+    float yIntersection = std::max(0.0f, std::min(box1.ybr, box2.ybr) - std::max(box1.ytl, box2.ytl));
+    float intersectionArea = xIntersection * yIntersection;
+
+    // Berechnung der Vereinigungsfläche
+    float unionArea = box1.area() + box2.area() - intersectionArea;
+
+    // Vermeidung von Division durch Null
+    if (unionArea == 0) {
+        return 0.0f;
+    }
+
+    return intersectionArea / unionArea;
+}
+
+/**
+ * @brief Testet die IoU-Berechnung zwischen getrackten Bounding Boxes und Ground-Truth-Daten.
+ *
+ * Durchläuft alle Frames und berechnet die IoU zwischen den Ground-Truth-Boxen und den vom Tracking-System
+ * generierten Boxen. Gibt die Ergebnisse und die durchschnittliche IoU aus.
+ */
+void MultiTracking::testIoU() {
+    std::cout << "Starte IoU-Test zwischen Tracking-Daten und Ground-Truth-Daten...\n";
+
+    int frameCount = 0;
+    float totalIoU = 0.0f;
+    int matchedCount = 0;
+
+    // Iteriere durch alle Frames in den Ground-Truth-Daten
+    for (const auto& [frame, gtBoxes] : groundTruthData) {
+        frameCount++;
+        std::cout << "Frame " << frame << ":\n";
+
+        // Sammle alle Bounding Boxes aus den Tracks
+        std::vector<BoundingBox> trackedBoxes;
+        for (const auto& [id, person] : tracks) {
+            cv::Rect bbox = cv::boundingRect(person.getContour());
+            trackedBoxes.emplace_back(frame, id, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height);
+        }
+
+        // Vergleiche jede Ground-Truth-Box mit jeder getrackten Box
+        for (const auto& gtBox : gtBoxes) {
+            float bestIoU = 0.0f;
+            int bestMatchId = -1;
+
+            for (const auto& trackedBox : trackedBoxes) {
+                float iou = calculateIoU(gtBox, trackedBox);
+
+                if (iou > bestIoU) {
+                    bestIoU = iou;
+                    bestMatchId = trackedBox.id;
+                }
+            }
+
+            std::cout << "  Ground-Truth Box (ID=" << gtBox.id << ") beste IoU mit Track ID "
+                      << bestMatchId << ": " << bestIoU << "\n";
+
+            if (bestIoU > 0.0f) {
+                totalIoU += bestIoU;
+                matchedCount++;
+            }
+        }
+    }
+
+    if (matchedCount > 0) {
+        float avgIoU = totalIoU / matchedCount;
+        std::cout << "Durchschnittliche IoU über alle Frames: " << avgIoU << "\n";
+    } else {
+        std::cout << "Keine übereinstimmenden Bounding Boxes gefunden.\n";
+    }
+
+    std::cout << "IoU-Test abgeschlossen.\n";
+}
+
+
+/**
+ * @brief Berechnet die Multiple Object Tracking Accuracy (MOTA).
+ * @return Der berechnete MOTA-Wert.
+ *
+ * MOTA berücksichtigt False Negatives (FN), False Positives (FP) und ID-Switches (IDSW) 
+ * im Verhältnis zu den Ground-Truth-Objekten.
+
+ * Ein höherer MOTA-Wert deutet auf eine bessere Tracking-Genauigkeit hin.
+ */
+float MultiTracking::calculateMOTA() {
+    int totalFalseNegatives = 0;
+    int totalFalsePositives = 0;
+    int totalIDSwitches = 0;
+    int totalGroundTruthObjects = 0;
+
+    for (const auto& [frame, groundTruthBoxes] : groundTruthData) {
+        totalGroundTruthObjects += groundTruthBoxes.size();
+
+        std::vector<BoundingBox> trackedBoxes;
+        for (const auto& [id, person] : tracks) {
+            cv::Rect bbox = cv::boundingRect(person.getContour());
+            trackedBoxes.emplace_back(frame, id, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height);
+        }
+
+        int falseNegatives = 0;
+        int falsePositives = 0;
+        int idSwitches = 0;
+
+        std::map<int, int> groundTruthToTrack;
+        for (const auto& gtBox : groundTruthBoxes) {
+            float bestIoU = 0.0f;
+            int bestTrackId = -1;
+
+            for (const auto& trackedBox : trackedBoxes) {
+                float iou = calculateIoU(gtBox, trackedBox);
+                if (iou > bestIoU) {
+                    bestIoU = iou;
+                    bestTrackId = trackedBox.id;
+                }
+            }
+
+            if (bestIoU >= 0.5) {
+                if (groundTruthToTrack.count(gtBox.id) > 0 && groundTruthToTrack[gtBox.id] != bestTrackId) {
+                    idSwitches++;
+                }
+                groundTruthToTrack[gtBox.id] = bestTrackId;
+            } else {
+                falseNegatives++;
+            }
+        }
+
+        for (const auto& trackedBox : trackedBoxes) {
+            bool matched = false;
+            for (const auto& [gtId, trackId] : groundTruthToTrack) {
+                if (trackId == trackedBox.id) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                falsePositives++;
+            }
+        }
+
+        totalFalseNegatives += falseNegatives;
+        totalFalsePositives += falsePositives;
+        totalIDSwitches += idSwitches;
+    }
+
+    if (totalGroundTruthObjects == 0) {
+        return 0.0f;
+    }
+
+    return 1.0f - static_cast<float>(totalFalseNegatives + totalFalsePositives + totalIDSwitches) / totalGroundTruthObjects;
+}
+
+
+/**
+ * @brief Berechnet den F1-Score für das Tracking.
+ * @return Der berechnete F1-Score.
+ *
+ * Der F1-Score ist das harmonische Mittel von Präzision und Recall und gibt eine ausgewogene
+ * Metrik für die Tracking-Performance.
+ *
+ */
+float MultiTracking::calculateF1Score() {
+    int truePositives = 0;
+    int falsePositives = 0;
+    int falseNegatives = 0;
+
+    for (const auto& [frame, groundTruthBoxes] : groundTruthData) {
+        std::vector<BoundingBox> trackedBoxes;
+        for (const auto& [id, person] : tracks) {
+            cv::Rect bbox = cv::boundingRect(person.getContour());
+            trackedBoxes.emplace_back(frame, id, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height);
+        }
+
+        std::set<int> matchedGroundTruth;
+        std::set<int> matchedTracked;
+
+        for (size_t i = 0; i < groundTruthBoxes.size(); ++i) {
+            const BoundingBox& gtBox = groundTruthBoxes[i];
+            float bestIoU = 0.0f;
+            int bestMatchIdx = -1;
+
+            for (size_t j = 0; j < trackedBoxes.size(); ++j) {
+                const BoundingBox& trackedBox = trackedBoxes[j];
+                float iou = calculateIoU(gtBox, trackedBox);
+
+                if (iou > bestIoU) {
+                    bestIoU = iou;
+                    bestMatchIdx = j;
+                }
+            }
+
+            if (bestIoU >= 0.5) {
+                matchedGroundTruth.insert(i);
+                matchedTracked.insert(bestMatchIdx);
+                truePositives++;
+            }
+        }
+
+        falsePositives += trackedBoxes.size() - matchedTracked.size();
+        falseNegatives += groundTruthBoxes.size() - matchedGroundTruth.size();
+    }
+
+    float precision = truePositives > 0 ? static_cast<float>(truePositives) / (truePositives + falsePositives) : 0.0f;
+    float recall = truePositives > 0 ? static_cast<float>(truePositives) / (truePositives + falseNegatives) : 0.0f;
+
+    if (precision + recall == 0.0f) {
+        return 0.0f;
+    }
+
+    return 2.0f * (precision * recall) / (precision + recall);
+}
+
+
+/**
+ * @brief Berechnet die Mean Average Precision (mAP) für das Tracking.
+ * @return Der berechnete mAP-Wert.
+ *
+ * Die mAP ist ein Durchschnitt der Average Precision (AP) über alle Klassen oder Objekte.
+ * Sie berücksichtigt die Präzision und den Recall bei verschiedenen IoU-Schwellen.
+ */
+float MultiTracking::calculateMeanAveragePrecision() {
+    int totalGroundTruths = 0;
+    float sumAveragePrecision = 0.0f;
+
+    // Iteriere über alle Frames
+    for (const auto& [frame, groundTruthBoxes] : groundTruthData) {
+        // Hole die getrackten Bounding Boxes für das aktuelle Frame
+        std::vector<BoundingBox> trackedBoxes;
+        for (const auto& [id, person] : tracks) {
+            cv::Rect bbox = cv::boundingRect(person.getContour());
+            trackedBoxes.emplace_back(frame, id, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height);
+        }
+
+        // Berechnung von Precision und Recall für die Tracking-Boxen
+        std::vector<float> precisions;
+        std::vector<float> recalls;
+
+        int truePositives = 0;
+        int falsePositives = 0;
+
+        std::set<int> matchedGroundTruth;
+
+        for (const auto& trackedBox : trackedBoxes) {
+            float bestIoU = 0.0f;
+            int bestMatchIdx = -1;
+
+            for (size_t i = 0; i < groundTruthBoxes.size(); ++i) {
+                if (matchedGroundTruth.find(i) != matchedGroundTruth.end()) {
+                    continue; // Überspringe bereits gematchte Ground-Truth-Boxen
+                }
+
+                float iou = calculateIoU(trackedBox, groundTruthBoxes[i]);
+                if (iou > bestIoU) {
+                    bestIoU = iou;
+                    bestMatchIdx = i;
+                }
+            }
+
+            if (bestIoU >= 0.5) { // IoU-Schwelle von 0.5
+                truePositives++;
+                matchedGroundTruth.insert(bestMatchIdx);
+            } else {
+                falsePositives++;
+            }
+
+            int falseNegatives = groundTruthBoxes.size() - matchedGroundTruth.size();
+            float precision = truePositives / static_cast<float>(truePositives + falsePositives);
+            float recall = truePositives / static_cast<float>(truePositives + falseNegatives);
+
+            precisions.push_back(precision);
+            recalls.push_back(recall);
+        }
+
+        // Berechnung der Average Precision (AP) für das aktuelle Frame
+        float averagePrecision = 0.0f;
+        for (size_t i = 1; i < precisions.size(); ++i) {
+            averagePrecision += precisions[i] * (recalls[i] - recalls[i - 1]);
+        }
+
+        sumAveragePrecision += averagePrecision;
+        totalGroundTruths += groundTruthBoxes.size();
+    }
+
+    // Mittelwert der Average Precision berechnen
+    if (totalGroundTruths == 0) {
+        return 0.0f; // Keine Ground-Truth-Daten
+    }
+
+    return sumAveragePrecision / totalGroundTruths;
 }
