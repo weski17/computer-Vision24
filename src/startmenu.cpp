@@ -247,32 +247,41 @@ void StartMenu::handleMenuSelection(MenuOption selectedOption, sf::RenderWindow 
     }
 
         case MultiMode: {
-            std::cout << "Multi Mode gestartet" << std::endl;
+            std::cout << "Multi Mode gestartet." << std::endl;
             window.close();
 
             cv::Mat frame;
-            while (true) {
-                cap >> frame;
-                if (frame.empty()) {
-                    std::cout << "Video-Tracking abgeschlossen." << std::endl;
+
+            // Initialisieren und Verarbeiten der Kameradaten für MOT
+            while (true)
+            {
+                cap >> frame; // Kamerabild abrufen
+                if (frame.empty())
+                {
+                    std::cout << "Kein Kamerabild verfügbar, Verarbeitung beendet." << std::endl;
                     break;
                 }
 
-                try {
-                    // Komplettes Tracking in einer Methode
+                try
+                {
+                    // Multi-Object-Tracking durchführen
                     multiTracking.processFrame(frame);
-                    // Ergebnisse anzeigen
-                } catch (const std::exception &e) {
-                    std::cerr << "Fehler beim Tracking: " << e.what() << std::endl;
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "Fehler beim Multi-Object-Tracking: " << e.what() << std::endl;
                     break;
                 }
 
-                if (cv::waitKey(30) == 'q') {
-                    std::cout << "Single Mode manuell beendet." << std::endl;
+                // Beenden der Verarbeitung durch Drücken der 'q'-Taste
+                if (cv::waitKey(30) == 'q')
+                {
+                    std::cout << "Multi Mode manuell beendet." << std::endl;
                     break;
                 }
             }
-            cv::destroyAllWindows(); // Fenster schließen
+
+            cv::destroyAllWindows(); // Alle Fenster schließen
             break;
         }
 
